@@ -38,6 +38,7 @@ def viz_weights_modes(weights, P, fname, title="Modes"):
   plt.colorbar(sm, cax=cbar_ax)
   plt.tight_layout(rect=[0, 0, 0.9, 1])
   plt.savefig(fname)
+  plt.close()
 
 
 def plot_mode_ablations(mode_loss_history, fname):
@@ -53,6 +54,7 @@ def plot_mode_ablations(mode_loss_history, fname):
     plt.ylabel("Test loss when only keeping this mode")
     plt.legend()
     plt.savefig(fname)
+    plt.close()
 
 def plot_magnitudes(magnitude_history, p, fname):
     plt.clf()
@@ -66,3 +68,4 @@ def plot_magnitudes(magnitude_history, p, fname):
     plt.ylabel("Magnitude")
     plt.legend()
     plt.savefig(fname)
+    plt.close()
