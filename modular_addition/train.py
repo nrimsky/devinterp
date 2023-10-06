@@ -7,6 +7,7 @@ from dynamics import ablate_other_modes_fourier_basis, ablate_other_modes_embed_
 from model_viz import viz_weights_modes, plot_mode_ablations, plot_magnitudes
 from movie import run_movie_cmd
 from dataclasses import dataclass
+from helpers import eval_model
 
 @dataclass
 class ExperimentParams:
@@ -28,19 +29,10 @@ class ExperimentParams:
   print_times = 10
   frame_times = 100
   freeze_embedding = False
+  scale_linear_1_factor = 2
 
   def get_suffix(self):
     return f"P{self.p}_frac{self.train_frac}_hid{self.hidden_size}_emb{self.embed_dim}_tie{self.tie_unembed}_freeze{self.freeze_embedding}"
-
-def eval_model(model, dataset, device):
-  model.eval()
-  avg_loss = 0
-  loss_fn = t.nn.CrossEntropyLoss()
-  with t.no_grad():
-    for (x1, x2), y in dataset:
-      out = model(x1.to(device), x2.to(device)).cpu()
-      avg_loss += loss_fn(out, y)
-  return avg_loss / len(dataset)
 
 def test(model, dataset, device):
   n_correct = 0

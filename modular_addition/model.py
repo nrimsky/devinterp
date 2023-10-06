@@ -1,6 +1,5 @@
 import torch as t
 
-
 class MLP(t.nn.Module):
     def __init__(self, params):
         super().__init__()
@@ -14,6 +13,8 @@ class MLP(t.nn.Module):
           self.linear2 = t.nn.Linear(params.hidden_size, params.p, bias=True)
         self.gelu = t.nn.GELU()
         self.vocab_size = params.p
+        self.linear1r.weight.data /= params.scale_linear_1_factor
+        self.linear1l.weight.data /= params.scale_linear_1_factor
 
     def forward(self, x1, x2):
         x1 = self.embedding(x1)
