@@ -66,13 +66,17 @@ def slgd(model, gamma, epsilon, n_steps, m, dataset, beta, device):
     return model, lambda_hat
 
 if __name__ == "__main__":
+    # todo: middle layer freezing in both training and measurement
+    # generate and test models with different numbers of fourier modes 
+    # vary p vs lambda
+    # compare to random commutative operation
     params = ExperimentParams()
     model = MLP(params)
     model.load_state_dict(t.load("models/model_P53_frac0.8_hid32_emb8_tieTrue_freezeFalse.pt"))
     dataset = make_dataset(params.p)
-    gamma = 1
-    epsilon = 0.003
-    n_steps = 10000
+    gamma = 0.1
+    epsilon = 0.001
+    n_steps = 20000
     m = 512
     beta = 1 / log(len(dataset))
     model, lambda_hat = slgd(model, gamma, epsilon, n_steps, m, dataset, beta, params.device)
