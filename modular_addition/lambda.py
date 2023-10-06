@@ -7,15 +7,15 @@ from train import ExperimentParams
 from model import MLP
 from dataset import make_dataset
 
-def log_l_fn(logits, y_s):
+def cross_entropy_loss(logits, y_s):
     """
     logits: outputs of model
     y: target labels
 
-    returns: mean log likelihood
+    returns: mean cross entropy loss
     """
     preds = t.nn.functional.softmax(logits, dim=1)
-    return t.mean(t.log(preds[t.arange(len(preds)), y_s] + 1e-6))
+    return -1*t.mean(t.log(preds[t.arange(len(preds)), y_s] + 1e-6))
 
 def slgd(model, gamma, epsilon, n_steps, m, dataset, beta, device):
     """
@@ -44,20 +44,19 @@ def slgd(model, gamma, epsilon, n_steps, m, dataset, beta, device):
         Y = t.stack([dataset[b][1] for b in batch_idx]).to(device)
         optimizer.zero_grad()
         out = model(X_1, X_2)
-        log_l = log_l_fn(out, Y)
-        array_loss.append(log_l.item())
+        cross_entropy_loss_value = cross_entropy_loss(out, Y)
+        array_loss.append(cross_entropy_loss_value.item())
         w = t.nn.utils.parameters_to_vector(model.parameters())
-        elasticity_loss = (gamma / 2) * t.sum(((w_star - w) ** 2))
-        log_likelihood_term = log_l * n * beta
-        objective_fn = (epsilon / 2) * (elasticity_loss + log_likelihood_term)
-        full_loss = (-1) * objective_fn # Because change in weights in SGD is *negative* gradient
+        elasticity_loss_term = (gamma / 2) * t.sum(((w_star - w) ** 2))
+        log_likelihood_loss_term = cross_entropy_loss_value * n * beta
+        full_loss = (epsilon / 2) * (elasticity_loss_term + log_likelihood_loss_term)
         full_loss.backward()
         optimizer.step()
         eta = t.randn_like(w, device=device) * sqrt(epsilon)
         with t.no_grad():
             new_params = t.nn.utils.parameters_to_vector(model.parameters()) + eta
             t.nn.utils.vector_to_parameters(new_params, model.parameters())
-    wbic = -n * sum(array_loss) / len(array_loss)
+    wbic = n * sum(array_loss) / len(array_loss)
     lambda_hat = (wbic - n_ln_wstar) / log(n)
     print(f"lambda_hat: {lambda_hat}")
     print(f"wbic: {wbic}")
@@ -72,8 +71,8 @@ if __name__ == "__main__":
     model.load_state_dict(t.load("models/model_P53_frac0.8_hid32_emb8_tieTrue_freezeFalse.pt"))
     dataset = make_dataset(params.p)
     gamma = 1
-    epsilon = 0.01
-    n_steps = 5000
+    epsilon = 0.003
+    n_steps = 10000
     m = 512
     beta = 1 / log(len(dataset))
     model, lambda_hat = slgd(model, gamma, epsilon, n_steps, m, dataset, beta, params.device)
