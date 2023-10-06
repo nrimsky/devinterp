@@ -1,0 +1,1 @@
+Implementing [Quantifying degeneracy in singular models via the learning coefficient](https://arxiv.org/pdf/2308.12108v1.pdf)
