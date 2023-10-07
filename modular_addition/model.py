@@ -10,7 +10,7 @@ class MLP(t.nn.Module):
         if params.tie_unembed:
           self.linear2 = t.nn.Linear(params.hidden_size, params.embed_dim, bias=True)
         else:
-          self.linear2 = t.nn.Linear(params.hidden_size, params.p, bias=True)
+          self.linear2 = t.nn.Linear(params.hidden_size, params.p, bias=False)
         self.gelu = t.nn.GELU()
         self.vocab_size = params.p
         self.linear1r.weight.data /= params.scale_linear_1_factor

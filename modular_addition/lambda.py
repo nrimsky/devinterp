@@ -62,7 +62,7 @@ def slgd(model, gamma, epsilon, n_steps, m, dataset, beta, device):
     print(f"wbic: {wbic}")
     print(f"n_ln_wstar: {n_ln_wstar}")
     print(f"init_loss: {init_loss}")
-    print(f"array_loss: {array_loss[::len(array_loss)//20]}")
+    print(f"array_loss: {array_loss[::len(array_loss)//50]}")
     return model, lambda_hat
 
 if __name__ == "__main__":
@@ -70,11 +70,12 @@ if __name__ == "__main__":
     # generate and test models with different numbers of fourier modes 
     # vary p vs lambda
     # compare to random commutative operation
+    # params = ExperimentParams.load_from_file("models/params_P53_frac0.8_hid32_emb8_tieTrue_freezeFalse_run1.json")
     params = ExperimentParams.load_from_file("models/params_P53_frac0.8_hid32_emb8_tieTrue_freezeFalse.json")
     model = MLP(params)
     model.load_state_dict(t.load(f"models/model_{params.get_suffix()}.pt"))
     dataset = make_dataset(params.p)
-    gamma = 0.1
+    gamma = 2
     epsilon = 0.001
     n_steps = 20000
     m = 512

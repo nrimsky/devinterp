@@ -33,6 +33,7 @@ class ExperimentParams:
   scale_linear_1_factor: int = 2
   save_activations: bool = False
   linear_1_tied: bool = False
+  run_id: int = 0
 
   def save_to_file(self, fname):
     class_dict = asdict(self)
@@ -46,7 +47,9 @@ class ExperimentParams:
     return ExperimentParams(**class_dict)
 
   def get_suffix(self):
-    return f"P{self.p}_frac{self.train_frac}_hid{self.hidden_size}_emb{self.embed_dim}_tie{self.tie_unembed}_freeze{self.freeze_middle}"
+    if self.run_id == 0:
+      return f"P{self.p}_frac{self.train_frac}_hid{self.hidden_size}_emb{self.embed_dim}_tie{self.tie_unembed}_freeze{self.freeze_middle}"
+    return f"P{self.p}_frac{self.train_frac}_hid{self.hidden_size}_emb{self.embed_dim}_tie{self.tie_unembed}_freeze{self.freeze_middle}_run{self.run_id}"
 
 def test(model, dataset, device):
   n_correct = 0
@@ -128,7 +131,7 @@ def train(model, train_dataset, test_dataset, params):
   return model, mode_loss_history, magnitude_history
 
 if __name__ == "__main__":
-    params = ExperimentParams(linear_1_tied=True)
+    params = ExperimentParams(linear_1_tied=True, run_id=1, movie=False)
     params.save_to_file(f"models/params_{params.get_suffix()}.json")
     model = MLP(params)
     dataset = make_dataset(params.p)
@@ -140,6 +143,7 @@ if __name__ == "__main__":
         params=params
     )
     t.save(model.state_dict(), f"models/model_{params.get_suffix()}.pt")
+    viz_weights_modes(model.embedding.weight.detach().cpu(), params.p, f"plots/final_embeddings_{params.get_suffix()}.png")  
     if len(mode_loss_history) > 0:
       plot_mode_ablations(mode_loss_history, f"plots/ablation_{params.get_suffix()}.png")
     if len(magnitude_history) > 0:
