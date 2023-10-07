@@ -16,14 +16,27 @@ class MLP(t.nn.Module):
         self.linear1r.weight.data /= params.scale_linear_1_factor
         self.linear1l.weight.data /= params.scale_linear_1_factor
 
-    def forward(self, x1, x2):
-        x1 = self.embedding(x1)
-        x2 = self.embedding(x2)
-        x1 = self.linear1l(x1)
-        x2 = self.linear1r(x2)
+        self.saved_activations = {}
+        self.params = params
+
+    def forward(self, a, b):
+        x1 = self.embedding(a)
+        x2 = self.embedding(b)
+        if self.params.linear_1_tied:
+          x1 = self.linear1r(x1)
+          x2 = self.linear1r(x2)
+        else:
+          x1 = self.linear1l(x1)
+          x2 = self.linear1r(x2)
         x = x1 + x2
         x = self.gelu(x)
         x = self.linear2(x)
+
+        if self.params.save_activations:
+          if len(a.shape) == 0:
+            a = a.unsqueeze(0)
+          self.saved_activations[(a[0], b[0])] = x[0].cpu().clone().detach() # (batch_size, embed_dim)
+
         if self.tie_unembed:
           x = x @ self.embedding.weight.T
         return x

@@ -70,9 +70,9 @@ if __name__ == "__main__":
     # generate and test models with different numbers of fourier modes 
     # vary p vs lambda
     # compare to random commutative operation
-    params = ExperimentParams()
+    params = ExperimentParams.load_from_file("models/params_P53_frac0.8_hid32_emb8_tieTrue_freezeFalse.json")
     model = MLP(params)
-    model.load_state_dict(t.load("models/model_P53_frac0.8_hid32_emb8_tieTrue_freezeFalse.pt"))
+    model.load_state_dict(t.load(f"models/model_{params.get_suffix()}.pt"))
     dataset = make_dataset(params.p)
     gamma = 0.1
     epsilon = 0.001

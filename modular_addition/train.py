@@ -6,33 +6,47 @@ from dataset import make_dataset, train_test_split
 from dynamics import ablate_other_modes_fourier_basis, ablate_other_modes_embed_basis, get_magnitude_modes
 from model_viz import viz_weights_modes, plot_mode_ablations, plot_magnitudes
 from movie import run_movie_cmd
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
+import json
 from helpers import eval_model
 
 @dataclass
 class ExperimentParams:
-  p = 53
-  train_frac = 0.8
-  hidden_size = 32
-  lr = 0.01
+  p: int = 53
+  train_frac: float = 0.8
+  hidden_size: int = 32
+  lr: float = 0.01
   device = t.device('cuda' if t.cuda.is_available() else 'cpu')
-  batch_size = 256
-  embed_dim = 8
-  tie_unembed = True
-  weight_decay = 0.0002
-  movie=True
-  magnitude=True
-  ablation_fourier=True
-  ablation_embed=False
-  n_batches = 1000
-  track_times = 20
-  print_times = 10
-  frame_times = 100
-  freeze_embedding = False
-  scale_linear_1_factor = 2
+  batch_size: int = 256
+  embed_dim: int = 8
+  tie_unembed: bool = True
+  weight_decay:float = 0.0002
+  movie: bool=True
+  magnitude: bool=True
+  ablation_fourier: bool=True
+  ablation_embed: bool=False
+  n_batches: int = 1000
+  track_times: int = 20
+  print_times: int = 10
+  frame_times: int = 100
+  freeze_middle: bool = False
+  scale_linear_1_factor: int = 2
+  save_activations: bool = False
+  linear_1_tied: bool = False
+
+  def save_to_file(self, fname):
+    class_dict = asdict(self)
+    with open(fname, "w") as f:
+      json.dump(class_dict, f)
+
+  @staticmethod
+  def load_from_file(fname):
+    with open(fname, "r") as f:
+      class_dict = json.load(f)
+    return ExperimentParams(**class_dict)
 
   def get_suffix(self):
-    return f"P{self.p}_frac{self.train_frac}_hid{self.hidden_size}_emb{self.embed_dim}_tie{self.tie_unembed}_freeze{self.freeze_embedding}"
+    return f"P{self.p}_frac{self.train_frac}_hid{self.hidden_size}_emb{self.embed_dim}_tie{self.tie_unembed}_freeze{self.freeze_middle}"
 
 def test(model, dataset, device):
   n_correct = 0
@@ -59,7 +73,7 @@ def get_loss_only_modes(model, modes, test_dataset, params):
 def train(model, train_dataset, test_dataset, params):
   model = model.to(params.device)
 
-  if params.freeze_embedding:
+  if params.freeze_middle:
     optimizer = t.optim.Adam(list(model.embedding.parameters()) + list(model.linear2.parameters()), weight_decay=params.weight_decay, lr=params.lr)
   else:
     optimizer = t.optim.Adam(model.parameters(), weight_decay=params.weight_decay, lr=params.lr)
@@ -114,7 +128,8 @@ def train(model, train_dataset, test_dataset, params):
   return model, mode_loss_history, magnitude_history
 
 if __name__ == "__main__":
-    params = ExperimentParams()
+    params = ExperimentParams(linear_1_tied=True)
+    params.save_to_file(f"models/params_{params.get_suffix()}.json")
     model = MLP(params)
     dataset = make_dataset(params.p)
     train_data, test_data = train_test_split(dataset, params.train_frac)
