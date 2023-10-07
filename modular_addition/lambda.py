@@ -8,6 +8,7 @@ from model import MLP
 from dataset import make_dataset, train_test_split, make_random_dataset
 from matplotlib import pyplot as plt
 from datetime import datetime
+from collections import defaultdict
 
 
 def cross_entropy_loss(logits, y_s):
@@ -73,7 +74,12 @@ def slgd(model, gamma, epsilon, n_steps, m, dataset, beta, device):
 
 
 def hyperparameter_search(
-    params_modular_addition_file, params_random_file, epsilon, n_steps, gamma_range
+    params_modular_addition_file,
+    params_random_file,
+    n_steps,
+    m,
+    epsilon_range,
+    gamma_range,
 ):
     params_modular_addition = ExperimentParams.load_from_file(
         params_modular_addition_file
@@ -85,52 +91,90 @@ def hyperparameter_search(
         random_dataset, params_random.train_frac, params_random.random_seed
     )
     modular_addition_dataset, _ = train_test_split(
-        modular_addition_dataset, params_modular_addition.train_frac, params_modular_addition.random_seed
+        modular_addition_dataset,
+        params_modular_addition.train_frac,
+        params_modular_addition.random_seed,
     )
     beta = 1 / log(len(modular_addition_dataset))
-    results_random = []
-    results_modular_addition = []
-    for gamma in gamma_range:
-        mlp_modular_addition = MLP(params_modular_addition)
-        mlp_random = MLP(params_random)
-        mlp_modular_addition.load_state_dict(
-            t.load(f"models/model_{params_modular_addition.get_suffix()}.pt")
-        )
-        mlp_random.load_state_dict(
-            t.load(f"models/model_{params_random.get_suffix()}.pt")
-        )
-        _, lambda_hat_modular_addition = slgd(
-            mlp_modular_addition,
-            gamma,
-            epsilon,
-            n_steps,
-            params_modular_addition.m,
-            modular_addition_dataset,
-            beta,
-            params_modular_addition.device,
-        )
-        _, lambda_hat_random = slgd(
-            mlp_random,
-            gamma,
-            epsilon,
-            n_steps,
-            params_random.m,
-            random_dataset,
-            beta,
-            params_random.device,
-        )
-        results_modular_addition.append(lambda_hat_modular_addition)
-        results_random.append(lambda_hat_random)
+    results_random = defaultdict(list)
+    results_modular_addition = defaultdict(list)
+    for epsilon in epsilon_range:
+        actual_n_steps = int(n_steps / sqrt(epsilon))
+        for gamma in gamma_range:
+            mlp_modular_addition = MLP(params_modular_addition)
+            mlp_random = MLP(params_random)
+            mlp_modular_addition.load_state_dict(
+                t.load(f"models/model_{params_modular_addition.get_suffix()}.pt")
+            )
+            mlp_random.load_state_dict(
+                t.load(f"models/model_{params_random.get_suffix()}.pt")
+            )
+            _, lambda_hat_modular_addition = slgd(
+                mlp_modular_addition,
+                gamma,
+                epsilon,
+                actual_n_steps,
+                m,
+                modular_addition_dataset,
+                beta,
+                params_modular_addition.device,
+            )
+            _, lambda_hat_random = slgd(
+                mlp_random,
+                gamma,
+                epsilon,
+                actual_n_steps,
+                m,
+                random_dataset,
+                beta,
+                params_random.device,
+            )
+            results_modular_addition[epsilon].append(lambda_hat_modular_addition)
+            results_random[epsilon].append(lambda_hat_random)
     # plot results
-    plt.clf()
-    plt.figure()
-    plt.plot(gamma_range, results_modular_addition, label="modular addition")
-    plt.plot(gamma_range, results_random, label="random")
-    plt.xlabel("$\gamma$")
-    plt.ylabel("$\hat{\lambda}$")
-    plt.legend()
-    plt.savefig(f'plots/lambda_vs_gamma_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png')
-    plt.close()
+    for epsilon in epsilon_range:
+        plt.clf()
+        plt.figure()
+        plt.plot(
+            gamma_range, results_modular_addition[epsilon], label="modular addition"
+        )
+        plt.plot(gamma_range, results_random[epsilon], label="random")
+        plt.title(
+            f"$\lambda$ vs $\gamma$ ($\epsilon$={epsilon}, n_steps={n_steps}, m={m})"
+        )
+        plt.xlabel("$\gamma$")
+        plt.ylabel("$\hat{\lambda}$")
+        plt.legend()
+        plt.savefig(
+            f'plots/lambda_vs_gamma_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+        )
+        plt.close()
+    for idx, gamma in enumerate(gamma_range):
+        plt.clf()
+        plt.figure()
+        results_per_epsilon_modular_addition = [
+            results_modular_addition[epsilon][idx] for epsilon in epsilon_range
+        ]
+        results_per_epsilon_random = [
+            results_random[epsilon][idx] for epsilon in epsilon_range
+        ]
+        plt.plot(
+            epsilon_range,
+            results_per_epsilon_modular_addition,
+            label="modular addition",
+        )
+        plt.plot(epsilon_range, results_per_epsilon_random, label="random")
+        plt.title(
+            f"$\lambda$ vs $\epsilon$ ($\gamma$={gamma}, n_steps={n_steps}, m={m})"
+        )
+        plt.xlabel("$\epsilon$")
+        plt.ylabel("$\hat{\lambda}$")
+        plt.legend()
+        plt.savefig(
+            f'plots/lambda_vs_epsilon_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+        )
+        plt.close()
+
 
 def get_lambda(param_file):
     params = ExperimentParams.load_from_file(param_file)
@@ -159,7 +203,16 @@ if __name__ == "__main__":
     # compare to random commutative operation
     params_random_file = "models/params_RANDOM_P53_frac0.8_hid32_emb8_tieunembedTrue_tielinFalse_freezeFalse_run6.json"
     params_modular_addition_file = "models/params_P53_frac0.8_hid32_emb8_tieunembedTrue_tielinFalse_freezeFalse_run7.json"
-    epsilon = 0.001
     n_steps = 1000
-    gamma_range = [1, 2]
-    hyperparameter_search(params_modular_addition_file, params_random_file, epsilon, n_steps, gamma_range)
+    # gamma_range = [0.01, 0.1, 0.25, 0.35, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 5, 7, 10]
+    gamma_range = [0.5]
+    epsilon_range = [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3]
+    m = 256
+    hyperparameter_search(
+        params_modular_addition_file,
+        params_random_file,
+        n_steps,
+        m,
+        epsilon_range,
+        gamma_range,
+    )
