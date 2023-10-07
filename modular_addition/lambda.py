@@ -5,7 +5,7 @@ from helpers import eval_model
 from math import log, sqrt
 from train import ExperimentParams
 from model import MLP
-from dataset import make_dataset
+from dataset import make_dataset, train_test_split
 
 def cross_entropy_loss(logits, y_s):
     """
@@ -70,16 +70,16 @@ if __name__ == "__main__":
     # generate and test models with different numbers of fourier modes 
     # vary p vs lambda
     # compare to random commutative operation
-    # params = ExperimentParams.load_from_file("models/params_P53_frac0.8_hid32_emb8_tieTrue_freezeFalse_run1.json")
-    params = ExperimentParams.load_from_file("models/params_P53_frac0.8_hid32_emb8_tieTrue_freezeFalse.json")
+    params = ExperimentParams.load_from_file("models/params_P53_frac0.8_hid32_emb8_tieunembedTrue_tielinTrue_freezeFalse_run2.json")
     model = MLP(params)
     model.load_state_dict(t.load(f"models/model_{params.get_suffix()}.pt"))
     dataset = make_dataset(params.p)
+    train_data, _ = train_test_split(dataset, params.train_frac, params.random_seed)
     gamma = 2
     epsilon = 0.001
     n_steps = 20000
     m = 512
-    beta = 1 / log(len(dataset))
-    model, lambda_hat = slgd(model, gamma, epsilon, n_steps, m, dataset, beta, params.device)
+    beta = 1 / log(len(train_data))
+    model, lambda_hat = slgd(model, gamma, epsilon, n_steps, m, train_data, beta, params.device)
     print(lambda_hat)
 

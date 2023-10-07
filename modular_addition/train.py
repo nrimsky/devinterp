@@ -34,6 +34,7 @@ class ExperimentParams:
   save_activations: bool = False
   linear_1_tied: bool = False
   run_id: int = 0
+  random_seed: int = 0
 
   def save_to_file(self, fname):
     class_dict = asdict(self)
@@ -47,9 +48,8 @@ class ExperimentParams:
     return ExperimentParams(**class_dict)
 
   def get_suffix(self):
-    if self.run_id == 0:
-      return f"P{self.p}_frac{self.train_frac}_hid{self.hidden_size}_emb{self.embed_dim}_tie{self.tie_unembed}_freeze{self.freeze_middle}"
-    return f"P{self.p}_frac{self.train_frac}_hid{self.hidden_size}_emb{self.embed_dim}_tie{self.tie_unembed}_freeze{self.freeze_middle}_run{self.run_id}"
+    suffix = f"P{self.p}_frac{self.train_frac}_hid{self.hidden_size}_emb{self.embed_dim}_tieunembed{self.tie_unembed}_tielin{self.linear_1_tied}_freeze{self.freeze_middle}_run{self.run_id}"
+    return suffix
 
 def test(model, dataset, device):
   n_correct = 0
@@ -131,11 +131,11 @@ def train(model, train_dataset, test_dataset, params):
   return model, mode_loss_history, magnitude_history
 
 if __name__ == "__main__":
-    params = ExperimentParams(linear_1_tied=True, run_id=1, movie=False)
+    params = ExperimentParams(linear_1_tied=True, run_id=3, movie=False)
     params.save_to_file(f"models/params_{params.get_suffix()}.json")
     model = MLP(params)
     dataset = make_dataset(params.p)
-    train_data, test_data = train_test_split(dataset, params.train_frac)
+    train_data, test_data = train_test_split(dataset, params.train_frac, params.random_seed)
     model, mode_loss_history, magnitude_history = train(
         model=model,
         train_dataset=train_data,

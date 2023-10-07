@@ -1,6 +1,11 @@
 import torch as t
 import random
 
+def deterministic_shuffle(lst, seed):
+  random.seed(seed)
+  random.shuffle(lst)
+  return lst
+
 def get_all_pairs(p):
   pairs = []
   for i in range(p):
@@ -15,11 +20,12 @@ def make_dataset(p):
     data.append(((t.tensor(a), t.tensor(b)), t.tensor((a + b) % p)))
   return data
 
-def train_test_split(dataset, train_split_proportion):
+def train_test_split(dataset, train_split_proportion, seed):
   l = len(dataset)
   train_len = int(train_split_proportion * l)
   idx = list(range(l))
-  random.shuffle(idx)
+  idx = deterministic_shuffle(idx, seed)
+  print("First indices of shuffled dataset", idx[:10])
   train_idx = idx[:train_len]
   test_idx = idx[train_len:]
   return [dataset[i] for i in train_idx], [dataset[i] for i in test_idx]
