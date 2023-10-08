@@ -42,6 +42,7 @@ class ExperimentParams:
     run_id: int = 0
     random_seed: int = 0
     use_random_dataset: bool = False
+    n_save_model_checkpoints: int = 0
 
     def save_to_file(self, fname):
         class_dict = asdict(self)
@@ -54,10 +55,12 @@ class ExperimentParams:
             class_dict = json.load(f)
         return ExperimentParams(**class_dict)
 
-    def get_suffix(self):
+    def get_suffix(self, checkpoint_no=None):
         suffix = f"P{self.p}_frac{self.train_frac}_hid{self.hidden_size}_emb{self.embed_dim}_tieunembed{self.tie_unembed}_tielin{self.linear_1_tied}_freeze{self.freeze_middle}_run{self.run_id}"
         if self.use_random_dataset:
             suffix = "RANDOM_" + suffix
+        if checkpoint_no is not None:
+            suffix = "CHECKPOINT_" + str(checkpoint_no) + "_" + suffix
         return suffix
 
 
@@ -93,15 +96,23 @@ def train(model, train_dataset, test_dataset, params):
     model = model.to(params.device)
 
     if params.freeze_middle:
-        optimizer = t.optim.Adam(
-            list(model.embedding.parameters()) + list(model.linear2.parameters()),
-            weight_decay=params.weight_decay,
-            lr=params.lr,
-        )
+        if params.tie_unembed:
+            optimizer = t.optim.Adam(
+                model.embedding.parameters(),
+                weight_decay=params.weight_decay,
+                lr=params.lr,
+            )
+        else:
+            optimizer = t.optim.Adam(
+                list(model.embedding.parameters()) + list(model.linear2.parameters()),
+                weight_decay=params.weight_decay,
+                lr=params.lr,
+            )
     else:
         optimizer = t.optim.Adam(
             model.parameters(), weight_decay=params.weight_decay, lr=params.lr
         )
+
     loss_fn = t.nn.CrossEntropyLoss()
     idx = list(range(len(train_dataset)))
     avg_loss = 0
@@ -109,7 +120,11 @@ def train(model, train_dataset, test_dataset, params):
     track_every = params.n_batches // params.track_times
     print_every = params.n_batches // params.print_times
     frame_every = params.n_batches // params.frame_times
+    checkpoint_every = None
+    if params.n_save_model_checkpoints > 0:
+        checkpoint_every = params.n_batches // params.n_save_model_checkpoints
     step = 0
+    checkpoint_no = 0
 
     mode_loss_history = []
     magnitude_history = []
@@ -117,6 +132,9 @@ def train(model, train_dataset, test_dataset, params):
     for i in tqdm(range(params.n_batches)):
         with t.no_grad():
             model.eval()
+            if checkpoint_every is not None and i % checkpoint_every == 0:
+                t.save(model.state_dict(), f"models/checkpoints/{params.get_suffix(checkpoint_no)}.pt")
+                checkpoint_no += 1
             if i % print_every == 0:
                 val_acc = test(model, test_dataset, params.device)
                 avg_loss /= print_every
@@ -164,13 +182,20 @@ def train(model, train_dataset, test_dataset, params):
 if __name__ == "__main__":
     params = ExperimentParams(
         linear_1_tied=False,
-        run_id=9,
+        tie_unembed=False,
+        run_id=0,
         movie=False,
-        scale_linear_1_factor=.5,
+        scale_linear_1_factor=1,
         scale_embed=1,
         use_random_dataset=False,
-        embed_dim=32,
-        hidden_size=64,
+        embed_dim=16,
+        hidden_size=128,
+        freeze_middle=True,
+        n_batches=500,
+        n_save_model_checkpoints=20,
+        lr=0.01,
+        magnitude=True,
+        ablation_fourier=True,
     )
     params.save_to_file(f"models/params_{params.get_suffix()}.json")
     model = MLP(params)

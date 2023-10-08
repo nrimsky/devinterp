@@ -1,7 +1,7 @@
 import torch as t
 from tqdm import tqdm
 import random
-from helpers import eval_model
+from helpers import eval_model, reshape_submodule_param_vector, get_submodule_param_mask
 from math import log, sqrt
 from train import ExperimentParams
 from model import MLP
@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 from datetime import datetime
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import Callable
 
 
 @dataclass
@@ -18,6 +19,9 @@ class SLGDParams:
     epsilon: float = 0.001
     n_steps: int = 10000
     m: int = 512
+    restrict_to_orth_grad: bool = False
+    get_updated_model_parameters: Callable = lambda model: model.parameters()
+    log_loss_multiplier: float = 1
 
 
 def cross_entropy_loss(logits, y_s):
@@ -42,14 +46,37 @@ def slgd(model, slgd_params, dataset, beta, device):
     """
     n = len(dataset)
     model = model.to(device)
+
     init_loss = eval_model(model, dataset, device)
     n_ln_wstar = n * init_loss
     idx = list(range(len(dataset)))
-    optimizer = t.optim.SGD(model.parameters(), lr=1, weight_decay=0)
-    w_star = (
-        t.nn.utils.parameters_to_vector(model.parameters()).detach().clone().to(device)
+    optimizer = optimizer = t.optim.SGD(
+        slgd_params.get_updated_model_parameters(model),
+        weight_decay=0,
+        lr=1,
     )
+
+    submodule_param_mask = get_submodule_param_mask(model, slgd_params.get_updated_model_parameters).to(device)
+
+    X_1 = t.stack([dataset[b][0][0] for b in range(len(dataset))]).to(device)
+    X_2 = t.stack([dataset[b][0][1] for b in range(len(dataset))]).to(device)
+    Y = t.stack([dataset[b][1] for b in range(len(dataset))]).to(device)
+    w_0 = t.nn.utils.parameters_to_vector(model.parameters()).detach().clone().to(device)
+
+    out = model(X_1, X_2)
+    cross_entropy_loss_value = cross_entropy_loss(out, Y)
+
+    # Compute gradients using torch.autograd.grad
+    gradients = t.autograd.grad(cross_entropy_loss_value, model.parameters(), create_graph=True)
+    ce_loss_grad_w0 = t.nn.utils.parameters_to_vector(gradients).detach().clone().to(device)
+    ce_loss_grad_w0 *= submodule_param_mask
+    ce_loss_grad_w0 /= ce_loss_grad_w0.norm(p=2)
+    optimizer.zero_grad()
+
     array_loss = []
+    array_weight_norm = []
+    full_losses = []
+
     for _ in tqdm(range(slgd_params.n_steps)):
         batch_idx = random.sample(idx, slgd_params.m)
         X_1 = t.stack([dataset[b][0][0] for b in batch_idx]).to(device)
@@ -60,16 +87,22 @@ def slgd(model, slgd_params, dataset, beta, device):
         cross_entropy_loss_value = cross_entropy_loss(out, Y)
         array_loss.append(cross_entropy_loss_value.item())
         w = t.nn.utils.parameters_to_vector(model.parameters())
-        elasticity_loss_term = (slgd_params.gamma / 2) * t.sum(((w_star - w) ** 2))
-        log_likelihood_loss_term = cross_entropy_loss_value * n * beta
+        array_weight_norm.append((w * submodule_param_mask).norm(p=2).item())
+        elasticity_loss_term = (slgd_params.gamma / 2) * t.sum(((w_0 - w) ** 2))
+        log_likelihood_loss_term = cross_entropy_loss_value * n * beta * slgd_params.log_loss_multiplier
         full_loss = (slgd_params.epsilon / 2) * (
             elasticity_loss_term + log_likelihood_loss_term
         )
+        full_losses.append((elasticity_loss_term.item(), log_likelihood_loss_term.item()))
         full_loss.backward()
         optimizer.step()
-        eta = t.randn_like(w, device=device) * sqrt(slgd_params.epsilon)
+        eta = t.randn_like(w, device=device) * sqrt(slgd_params.epsilon) * submodule_param_mask
         with t.no_grad():
             new_params = t.nn.utils.parameters_to_vector(model.parameters()) + eta
+            if slgd_params.restrict_to_orth_grad:
+                diff = new_params - w_0
+                proj_diff = diff - t.dot(diff, ce_loss_grad_w0) * ce_loss_grad_w0
+                new_params = w_0 + proj_diff
             t.nn.utils.vector_to_parameters(new_params, model.parameters())
     wbic = n * sum(array_loss) / len(array_loss)
     lambda_hat = (wbic - n_ln_wstar) / log(n)
@@ -78,7 +111,9 @@ def slgd(model, slgd_params, dataset, beta, device):
     print(f"n_ln_wstar: {n_ln_wstar}")
     print(f"init_loss: {init_loss}")
     print(f"slgd_params: {slgd_params}")
-    print(f"array_loss: {array_loss[::len(array_loss)//50]}")
+    print(f"array_loss: {array_loss[::len(array_loss)//20]}")
+    print(f"array_weight_norm: {array_weight_norm[::len(array_weight_norm)//20]}")
+    print(f"full_losses: {full_losses[::len(full_losses)//20]}")
     return model, lambda_hat
 
 
@@ -184,10 +219,16 @@ def hyperparameter_search(
         plt.close()
 
 
-def get_lambda(param_file, slgd_params):
-    params = ExperimentParams.load_from_file(param_file)
+def get_lambda(params, slgd_params, checkpoint_no=None):
     model = MLP(params)
-    model.load_state_dict(t.load(f"models/model_{params.get_suffix()}.pt"))
+    if checkpoint_no is None:
+        model.load_state_dict(t.load(f"models/model_{params.get_suffix()}.pt"))
+    else:
+        model.load_state_dict(
+            t.load(
+                f"models/checkpoints/{params.get_suffix(checkpoint_no=checkpoint_no)}.pt"
+            )
+        )
     if params.use_random_dataset:
         dataset = make_random_dataset(params.p, params.random_seed)
     else:
@@ -201,7 +242,8 @@ def get_lambda(param_file, slgd_params):
 def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, slgd_params):
     lambda_values = []
     for param_file in param_files:
-        lambda_values.append(get_lambda(param_file, slgd_params))
+        params = ExperimentParams.load_from_file(param_file)
+        lambda_values.append(get_lambda(params, slgd_params))
     plt.clf()
     plt.figure()
     plt.plot(quantity_values, lambda_values)
@@ -214,19 +256,47 @@ def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, slgd_p
     plt.close()
 
 
+def plot_lambda_per_checkpoint(param_file, slgd_params, checkpoints=None):
+    lambda_values = []
+    params = ExperimentParams.load_from_file(param_file)
+    check_list = list(range(params.n_save_model_checkpoints))
+    if checkpoints is not None:
+        check_list = checkpoints
+    for i in check_list:
+        lambda_values.append(get_lambda(params, slgd_params, checkpoint_no=i))
+    plt.clf()
+    plt.figure()
+    plt.plot(check_list, lambda_values)
+    plt.title(f"$\lambda$ vs checkpoint")
+    plt.xlabel("checkpoint")
+    plt.ylabel("$\hat{\lambda}$")
+    plt.savefig(
+        f'plots/lambda_vs_checkpoint_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+    )
+    plt.close()
+
+
 if __name__ == "__main__":
-    # TODO:
-    # Freeze middle layer in both training and lambda measurement sampling
-    # Generate and test models with different numbers of Fourier modes
-    # Vary P vs \lambda
+    slgd_params = SLGDParams(
+        gamma=5,
+        epsilon=0.001,
+        n_steps=3000,
+        m=512,
+        restrict_to_orth_grad=True,
+        get_updated_model_parameters=lambda model: list(model.embedding.parameters())
+        + list(model.linear2.parameters()),
+        log_loss_multiplier=0.1
+    )
+    plot_lambda_per_checkpoint("experiment_params/exp1.json", slgd_params)
 
-    # hyperparameter_search(
-    #     params_random_file="models/params_RANDOM_P53_frac0.8_hid64_emb32_tieunembedTrue_tielinFalse_freezeFalse_run8.json",
-    #     params_modular_addition_file="models/params_P53_frac0.8_hid64_emb32_tieunembedTrue_tielinFalse_freezeFalse_run9.json",
-    #     n_steps=5,
-    #     m=256,
-    #     epsilon_range=[0.001],
-    #     gamma_range=[0.1, 0.2, 0.5, 1, 1.5, 2],
+    # params = ExperimentParams.load_from_file("experiment_params/exp1.json")
+    # slgd_params = SLGDParams(
+    #     gamma=5,
+    #     epsilon=0.001,
+    #     n_steps=5000,
+    #     m=512,
+    #     restrict_to_orth_grad=True,
+    #     get_updated_model_parameters=lambda model: list(model.embedding.parameters())
+    #     + list(model.linear2.parameters()),
     # )
-
-    print("STUFF")
+    # get_lambda(params, slgd_params)
