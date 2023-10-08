@@ -154,7 +154,7 @@ def hyperparameter_search(
         plt.ylabel("$\hat{\lambda}$")
         plt.legend()
         plt.savefig(
-            f'plots/lambda_vs_gamma_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+            f'plots/lambda_vs_gamma_epsilon_{epsilon}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
         )
         plt.close()
     for idx, gamma in enumerate(gamma_range):
@@ -179,7 +179,7 @@ def hyperparameter_search(
         plt.ylabel("$\hat{\lambda}$")
         plt.legend()
         plt.savefig(
-            f'plots/lambda_vs_epsilon_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+            f'plots/lambda_vs_epsilon_gamma_{gamma}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
         )
         plt.close()
 
@@ -219,11 +219,14 @@ if __name__ == "__main__":
     # Freeze middle layer in both training and lambda measurement sampling
     # Generate and test models with different numbers of Fourier modes
     # Vary P vs \lambda
-    hyperparameter_search(
-        params_random_file="models/params_RANDOM_P53_frac0.8_hid32_emb8_tieunembedTrue_tielinFalse_freezeFalse_run6.json",
-        params_modular_addition_file="models/params_P53_frac0.8_hid32_emb8_tieunembedTrue_tielinFalse_freezeFalse_run7.json",
-        n_steps=50,
-        m=256,
-        epsilon_range=[0.001, 0.01],
-        gamma_range=[0.1, 1, 1.5, 2],
-    )
+
+    # hyperparameter_search(
+    #     params_random_file="models/params_RANDOM_P53_frac0.8_hid64_emb32_tieunembedTrue_tielinFalse_freezeFalse_run8.json",
+    #     params_modular_addition_file="models/params_P53_frac0.8_hid64_emb32_tieunembedTrue_tielinFalse_freezeFalse_run9.json",
+    #     n_steps=5,
+    #     m=256,
+    #     epsilon_range=[0.001],
+    #     gamma_range=[0.1, 0.2, 0.5, 1, 1.5, 2],
+    # )
+
+    print("STUFF")

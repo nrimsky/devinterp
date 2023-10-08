@@ -164,11 +164,13 @@ def train(model, train_dataset, test_dataset, params):
 if __name__ == "__main__":
     params = ExperimentParams(
         linear_1_tied=False,
-        run_id=7,
+        run_id=9,
         movie=False,
         scale_linear_1_factor=.5,
         scale_embed=1,
-        use_random_dataset=False
+        use_random_dataset=False,
+        embed_dim=32,
+        hidden_size=64,
     )
     params.save_to_file(f"models/params_{params.get_suffix()}.json")
     model = MLP(params)

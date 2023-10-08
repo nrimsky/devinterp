@@ -20,6 +20,6 @@ def experiment(params, a, model_fname):
 
 if __name__ == "__main__":
     params = ExperimentParams.load_from_file(
-        "models/params_P53_frac0.8_hid32_emb8_tieunembedTrue_tielinFalse_freezeFalse_run6.json"
+        "models/params_P53_frac0.8_hid64_emb32_tieunembedTrue_tielinFalse_freezeFalse_run9.json"
     )
     experiment(params, 17, f"models/model_{params.get_suffix()}.pt")
