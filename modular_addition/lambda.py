@@ -277,6 +277,8 @@ def plot_lambda_per_checkpoint(param_file, slgd_params, checkpoints=None):
 
 
 if __name__ == "__main__":
+    # TODO: restrict serach to normal of gradient over training lambda estimate or not - compare results!
+
     slgd_params = SLGDParams(
         gamma=5,
         epsilon=0.001,
