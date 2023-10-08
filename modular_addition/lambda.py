@@ -78,7 +78,7 @@ def slgd(model, slgd_params, dataset, beta, device):
     full_losses = []
 
     for _ in tqdm(range(slgd_params.n_steps)):
-        batch_idx = random.sample(idx, slgd_params.m)
+        batch_idx = random.choices(idx, k=slgd_params.m)
         X_1 = t.stack([dataset[b][0][0] for b in batch_idx]).to(device)
         X_2 = t.stack([dataset[b][0][1] for b in batch_idx]).to(device)
         Y = t.stack([dataset[b][1] for b in batch_idx]).to(device)
@@ -284,8 +284,8 @@ if __name__ == "__main__":
         m=64,
         restrict_to_orth_grad=False,
     )
-    p_values = [17, 29, 37, 43, 53]
-    fnames = [f"experiment_params/psweep5/{p}.json" for p in p_values]
+    p_values = list(range(5, 30, 5))
+    fnames = [f"experiment_params/psweep11/{p}.json" for p in p_values]
     plot_lambda_per_quantity(fnames, p_values, "P", slgd_params)
-    fnames = [f"experiment_params/psweep6/{p}.json" for p in p_values]
-    plot_lambda_per_quantity(fnames, p_values, "P", slgd_params)
+    # fnames = [f"experiment_params/psweep6/{p}.json" for p in p_values]
+    # plot_lambda_per_quantity(fnames, p_values, "P", slgd_params)

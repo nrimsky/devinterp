@@ -170,7 +170,7 @@ def train(model, train_dataset, test_dataset, params):
                 step += 1
         model.train()
         # Sample random batch of data
-        batch_idx = random.sample(idx, params.batch_size)
+        batch_idx = random.choices(idx, k=params.batch_size)
         X_1 = t.stack([train_dataset[b][0][0] for b in batch_idx]).to(params.device)
         X_2 = t.stack([train_dataset[b][0][1] for b in batch_idx]).to(params.device)
         Y = t.stack([train_dataset[b][1] for b in batch_idx]).to(params.device)
@@ -224,9 +224,30 @@ def p_sweep_exp(p_values, params, psweep):
 
 
 if __name__ == "__main__":
-    p_values = [17, 29, 37, 43, 53]
+    p_values = list(range(5, 30, 5))
     batch_size = 64
 
+    # params = ExperimentParams(
+    #     linear_1_tied=False,
+    #     tie_unembed=False,
+    #     run_id=1,
+    #     movie=False,
+    #     scale_linear_1_factor=1,
+    #     scale_embed=1,
+    #     use_random_dataset=False,
+    #     embed_dim=24,
+    #     hidden_size=64,
+    #     freeze_middle=False,
+    #     n_batches=10000,
+    #     n_save_model_checkpoints=0,
+    #     lr=0.01,
+    #     magnitude=True,
+    #     ablation_fourier=True,
+    #     do_viz_weights_modes=True,
+    #     batch_size=batch_size,
+    #     num_no_weight_decay_steps=1000
+    # )
+    # p_sweep_exp(p_values, params, "psweep8")
     params = ExperimentParams(
         linear_1_tied=False,
         tie_unembed=False,
@@ -234,38 +255,17 @@ if __name__ == "__main__":
         movie=False,
         scale_linear_1_factor=1,
         scale_embed=1,
-        use_random_dataset=False,
-        embed_dim=8,
-        hidden_size=32,
+        use_random_dataset=True,
+        embed_dim=50,
+        hidden_size=200,
         freeze_middle=False,
         n_batches=10000,
         n_save_model_checkpoints=0,
         lr=0.01,
-        magnitude=True,
-        ablation_fourier=True,
-        do_viz_weights_modes=True,
+        magnitude=False,
+        ablation_fourier=False,
+        do_viz_weights_modes=False,
         batch_size=batch_size,
-        num_no_weight_decay_steps=1000
+        num_no_weight_decay_steps=1000,
     )
-    p_sweep_exp(p_values, params, "psweep6")
-    params = ExperimentParams(
-        linear_1_tied=False,
-        tie_unembed=False,
-        run_id=1,
-        movie=False,
-        scale_linear_1_factor=1,
-        scale_embed=1,
-        use_random_dataset=False,
-        embed_dim=16,
-        hidden_size=32,
-        freeze_middle=False,
-        n_batches=10000,
-        n_save_model_checkpoints=0,
-        lr=0.01,
-        magnitude=True,
-        ablation_fourier=True,
-        do_viz_weights_modes=True,
-        batch_size=batch_size,
-        num_no_weight_decay_steps=1000
-    )
-    p_sweep_exp(p_values, params, "psweep7")
+    p_sweep_exp(p_values, params, "psweep11")
