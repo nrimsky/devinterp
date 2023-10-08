@@ -246,7 +246,7 @@ def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, slgd_p
         lambda_values.append(get_lambda(params, slgd_params))
     plt.clf()
     plt.figure()
-    plt.plot(quantity_values, lambda_values)
+    plt.plot(quantity_values, lambda_values, marker="o")
     plt.title(f"$\lambda$ vs {quantity_name}")
     plt.xlabel(quantity_name)
     plt.ylabel("$\hat{\lambda}$")
@@ -266,7 +266,7 @@ def plot_lambda_per_checkpoint(param_file, slgd_params, checkpoints=None):
         lambda_values.append(get_lambda(params, slgd_params, checkpoint_no=i))
     plt.clf()
     plt.figure()
-    plt.plot(check_list, lambda_values)
+    plt.plot(check_list, lambda_values, marker="o")
     plt.title(f"$\lambda$ vs checkpoint")
     plt.xlabel("checkpoint")
     plt.ylabel("$\hat{\lambda}$")
@@ -280,23 +280,12 @@ if __name__ == "__main__":
     slgd_params = SLGDParams(
         gamma=5,
         epsilon=0.001,
-        n_steps=3000,
-        m=512,
-        restrict_to_orth_grad=True,
-        get_updated_model_parameters=lambda model: list(model.embedding.parameters())
-        + list(model.linear2.parameters()),
-        log_loss_multiplier=0.1
+        n_steps=5000,
+        m=64,
+        restrict_to_orth_grad=False,
     )
-    plot_lambda_per_checkpoint("experiment_params/exp1.json", slgd_params)
-
-    # params = ExperimentParams.load_from_file("experiment_params/exp1.json")
-    # slgd_params = SLGDParams(
-    #     gamma=5,
-    #     epsilon=0.001,
-    #     n_steps=5000,
-    #     m=512,
-    #     restrict_to_orth_grad=True,
-    #     get_updated_model_parameters=lambda model: list(model.embedding.parameters())
-    #     + list(model.linear2.parameters()),
-    # )
-    # get_lambda(params, slgd_params)
+    p_values = [17, 29, 37, 43, 53]
+    fnames = [f"experiment_params/psweep5/{p}.json" for p in p_values]
+    plot_lambda_per_quantity(fnames, p_values, "P", slgd_params)
+    fnames = [f"experiment_params/psweep6/{p}.json" for p in p_values]
+    plot_lambda_per_quantity(fnames, p_values, "P", slgd_params)
