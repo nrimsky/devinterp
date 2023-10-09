@@ -1,7 +1,7 @@
 import torch as t
 from tqdm import tqdm
 import random
-from helpers import eval_model, reshape_submodule_param_vector, get_submodule_param_mask
+from helpers import eval_model, get_submodule_param_mask
 from math import log, sqrt
 from train import ExperimentParams
 from model import MLP
@@ -238,12 +238,15 @@ def get_lambda(params, slgd_params, checkpoint_no=None):
     _, lambda_hat = slgd(model, slgd_params, train_data, beta, params.device)
     return lambda_hat
 
-
-def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, slgd_params):
+def get_lambda_per_quantity(param_files, slgd_params):
     lambda_values = []
     for param_file in param_files:
         params = ExperimentParams.load_from_file(param_file)
         lambda_values.append(get_lambda(params, slgd_params))
+    return lambda_values
+
+def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, slgd_params):
+    lambda_values = get_lambda_per_quantity(param_files, slgd_params)
     plt.clf()
     plt.figure()
     plt.plot(quantity_values, lambda_values, marker="o")
@@ -286,8 +289,23 @@ if __name__ == "__main__":
         m=64,
         restrict_to_orth_grad=False,
     )
-    p_values = list(range(5, 30, 5))
-    fnames = [f"experiment_params/psweep11/{p}.json" for p in p_values]
-    plot_lambda_per_quantity(fnames, p_values, "P", slgd_params)
-    # fnames = [f"experiment_params/psweep6/{p}.json" for p in p_values]
-    # plot_lambda_per_quantity(fnames, p_values, "P", slgd_params)
+    p_values = [17, 29, 37, 43, 53]
+    fnames1 = [f"experiment_params/psweep6/{p}.json" for p in p_values]
+    fnames2 = [f"experiment_params/psweep7/{p}.json" for p in p_values]
+    fnames3 = [f"experiment_params/psweep8/{p}.json" for p in p_values]
+    lambda1 = get_lambda_per_quantity(fnames1, slgd_params)
+    lambda2 = get_lambda_per_quantity(fnames2, slgd_params)
+    lambda3 = get_lambda_per_quantity(fnames3, slgd_params)
+    plt.clf()
+    plt.figure()
+    plt.plot(p_values, lambda1, marker="o", label="Embed Dim = 8, Hidden Dim = 32")
+    plt.plot(p_values, lambda2, marker="o", label="Embed Dim = 16, Hidden Dim = 32")
+    plt.plot(p_values, lambda3, marker="o", label="Embed Dim = 24, Hidden Dim = 64")
+    plt.legend()
+    plt.title(f"$\hat\lambda$ vs $P$")
+    plt.xlabel("$P$")
+    plt.ylabel("$\hat{\lambda}$")
+    plt.savefig(
+        f'plots/lambda_vs_P_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+    )
+    plt.close()
