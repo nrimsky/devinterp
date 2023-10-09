@@ -283,7 +283,7 @@ def plot_lambda_per_checkpoint(param_file, sgld_params, checkpoints=None):
     plt.xlabel("checkpoint")
     plt.ylabel("$\hat{\lambda}$")
     plt.savefig(
-        f'plots/lambda_vs_checkpoint_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+        f'plots/lambda_vs_checkpoint_{datetime.now().strftime("%Y%m%d_%H%M%S")}_restrictorth{sgld_params.restrict_to_orth_grad}.png'
     )
     plt.close()
 
@@ -297,11 +297,11 @@ if __name__ == "__main__":
         restrict_to_orth_grad=True,
     )
     plot_lambda_per_checkpoint("experiment_params/exp2.json", sgld_params)
-    sgld_params = SGLDParams(
-        gamma=5,
-        epsilon=0.001,
-        n_steps=5000,
-        m=64,
-        restrict_to_orth_grad=False,
-    )
-    plot_lambda_per_checkpoint("experiment_params/exp2.json", sgld_params)
+    # sgld_params = SGLDParams(
+    #     gamma=5,
+    #     epsilon=0.001,
+    #     n_steps=5000,
+    #     m=64,
+    #     restrict_to_orth_grad=False,
+    # )
+    # plot_lambda_per_checkpoint("experiment_params/exp2.json", sgld_params)
