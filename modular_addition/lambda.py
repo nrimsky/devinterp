@@ -11,10 +11,11 @@ from datetime import datetime
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable
+import json
 
 
 @dataclass
-class SLGDParams:
+class SGLDParams:
     gamma: float = 1
     epsilon: float = 0.001
     n_steps: int = 10000
@@ -35,10 +36,10 @@ def cross_entropy_loss(logits, y_s):
     return -1 * t.mean(t.log(preds[t.arange(len(preds)), y_s] + 1e-6))
 
 
-def slgd(model, slgd_params, dataset, beta, device):
+def sgld(model, sgld_params, dataset, beta, device):
     """
     model: MLP model
-    slgd_params: SLGDParams object
+    sgld_params: SGLDParams object
     dataset: dataset to train on
     beta: temperature parameter
 
@@ -51,12 +52,12 @@ def slgd(model, slgd_params, dataset, beta, device):
     n_ln_wstar = n * init_loss
     idx = list(range(len(dataset)))
     optimizer = optimizer = t.optim.SGD(
-        slgd_params.get_updated_model_parameters(model),
+        sgld_params.get_updated_model_parameters(model),
         weight_decay=0,
         lr=1,
     )
 
-    submodule_param_mask = get_submodule_param_mask(model, slgd_params.get_updated_model_parameters).to(device)
+    submodule_param_mask = get_submodule_param_mask(model, sgld_params.get_updated_model_parameters).to(device)
 
     X_1 = t.stack([dataset[b][0][0] for b in range(len(dataset))]).to(device)
     X_2 = t.stack([dataset[b][0][1] for b in range(len(dataset))]).to(device)
@@ -77,8 +78,8 @@ def slgd(model, slgd_params, dataset, beta, device):
     array_weight_norm = []
     full_losses = []
 
-    for _ in tqdm(range(slgd_params.n_steps)):
-        batch_idx = random.choices(idx, k=slgd_params.m)
+    for _ in tqdm(range(sgld_params.n_steps)):
+        batch_idx = random.choices(idx, k=sgld_params.m)
         X_1 = t.stack([dataset[b][0][0] for b in batch_idx]).to(device)
         X_2 = t.stack([dataset[b][0][1] for b in batch_idx]).to(device)
         Y = t.stack([dataset[b][1] for b in batch_idx]).to(device)
@@ -88,18 +89,18 @@ def slgd(model, slgd_params, dataset, beta, device):
         array_loss.append(cross_entropy_loss_value.item())
         w = t.nn.utils.parameters_to_vector(model.parameters())
         array_weight_norm.append((w * submodule_param_mask).norm(p=2).item())
-        elasticity_loss_term = (slgd_params.gamma / 2) * t.sum(((w_0 - w) ** 2))
-        log_likelihood_loss_term = cross_entropy_loss_value * n * beta * slgd_params.log_loss_multiplier
-        full_loss = (slgd_params.epsilon / 2) * (
+        elasticity_loss_term = (sgld_params.gamma / 2) * t.sum(((w_0 - w) ** 2))
+        log_likelihood_loss_term = cross_entropy_loss_value * n * beta * sgld_params.log_loss_multiplier
+        full_loss = (sgld_params.epsilon / 2) * (
             elasticity_loss_term + log_likelihood_loss_term
         )
         full_losses.append((elasticity_loss_term.item(), log_likelihood_loss_term.item()))
         full_loss.backward()
         optimizer.step()
-        eta = t.randn_like(w, device=device) * sqrt(slgd_params.epsilon) * submodule_param_mask
+        eta = t.randn_like(w, device=device) * sqrt(sgld_params.epsilon) * submodule_param_mask
         with t.no_grad():
             new_params = t.nn.utils.parameters_to_vector(model.parameters()) + eta
-            if slgd_params.restrict_to_orth_grad:
+            if sgld_params.restrict_to_orth_grad:
                 diff = new_params - w_0
                 proj_diff = diff - t.dot(diff, ce_loss_grad_w0) * ce_loss_grad_w0
                 new_params = w_0 + proj_diff
@@ -110,7 +111,7 @@ def slgd(model, slgd_params, dataset, beta, device):
     print(f"wbic: {wbic}")
     print(f"n_ln_wstar: {n_ln_wstar}")
     print(f"init_loss: {init_loss}")
-    print(f"slgd_params: {slgd_params}")
+    print(f"sgld_params: {sgld_params}")
     print(f"array_loss: {array_loss[::len(array_loss)//20]}")
     print(f"array_weight_norm: {array_weight_norm[::len(array_weight_norm)//20]}")
     print(f"full_losses: {full_losses[::len(full_losses)//20]}")
@@ -125,8 +126,8 @@ def hyperparameter_search(
     epsilon_range,
     gamma_range,
 ):
-    slgd_params = SLGDParams()
-    slgd_params.m = m
+    sgld_params = SGLDParams()
+    sgld_params.m = m
     params_modular_addition = ExperimentParams.load_from_file(
         params_modular_addition_file
     )
@@ -146,28 +147,28 @@ def hyperparameter_search(
     results_modular_addition = defaultdict(list)
     for epsilon in epsilon_range:
         actual_n_steps = int(n_steps / epsilon)
-        slgd_params.epsilon = epsilon
-        slgd_params.n_steps = actual_n_steps
+        sgld_params.epsilon = epsilon
+        sgld_params.n_steps = actual_n_steps
         for gamma in gamma_range:
             mlp_modular_addition = MLP(params_modular_addition)
             mlp_random = MLP(params_random)
-            slgd_params.gamma = gamma
+            sgld_params.gamma = gamma
             mlp_modular_addition.load_state_dict(
                 t.load(f"models/model_{params_modular_addition.get_suffix()}.pt")
             )
             mlp_random.load_state_dict(
                 t.load(f"models/model_{params_random.get_suffix()}.pt")
             )
-            _, lambda_hat_modular_addition = slgd(
+            _, lambda_hat_modular_addition = sgld(
                 mlp_modular_addition,
-                slgd_params,
+                sgld_params,
                 modular_addition_dataset,
                 beta,
                 params_modular_addition.device,
             )
-            _, lambda_hat_random = slgd(
+            _, lambda_hat_random = sgld(
                 mlp_random,
-                slgd_params,
+                sgld_params,
                 random_dataset,
                 beta,
                 params_random.device,
@@ -219,7 +220,7 @@ def hyperparameter_search(
         plt.close()
 
 
-def get_lambda(params, slgd_params, checkpoint_no=None):
+def get_lambda(params, sgld_params, checkpoint_no=None):
     model = MLP(params)
     if checkpoint_no is None:
         model.load_state_dict(t.load(f"models/model_{params.get_suffix()}.pt"))
@@ -235,18 +236,26 @@ def get_lambda(params, slgd_params, checkpoint_no=None):
         dataset = make_dataset(params.p)
     train_data, _ = train_test_split(dataset, params.train_frac, params.random_seed)
     beta = 1 / log(len(train_data))
-    _, lambda_hat = slgd(model, slgd_params, train_data, beta, params.device)
+    _, lambda_hat = sgld(model, sgld_params, train_data, beta, params.device)
     return lambda_hat
 
-def get_lambda_per_quantity(param_files, slgd_params):
+def get_lambda_per_quantity(param_files, sgld_params, resample=True):
     lambda_values = []
     for param_file in param_files:
         params = ExperimentParams.load_from_file(param_file)
-        lambda_values.append(get_lambda(params, slgd_params))
+        if not resample and params.lambda_hat is not None:
+            lambda_values.append(params.lambda_hat)
+            continue
+        lambda_hat = get_lambda(params, sgld_params)
+        lambda_values.append(lambda_hat)
+        param_dict = params.get_dict()
+        param_dict["lambda_hat"] = lambda_hat.item()
+        with open(param_file, "w") as f:
+            json.dump(param_dict, f)
     return lambda_values
 
-def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, slgd_params):
-    lambda_values = get_lambda_per_quantity(param_files, slgd_params)
+def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, sgld_params):
+    lambda_values = get_lambda_per_quantity(param_files, sgld_params)
     plt.clf()
     plt.figure()
     plt.plot(quantity_values, lambda_values, marker="o")
@@ -259,14 +268,14 @@ def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, slgd_p
     plt.close()
 
 
-def plot_lambda_per_checkpoint(param_file, slgd_params, checkpoints=None):
+def plot_lambda_per_checkpoint(param_file, sgld_params, checkpoints=None):
     lambda_values = []
     params = ExperimentParams.load_from_file(param_file)
     check_list = list(range(params.n_save_model_checkpoints))
     if checkpoints is not None:
         check_list = checkpoints
     for i in check_list:
-        lambda_values.append(get_lambda(params, slgd_params, checkpoint_no=i))
+        lambda_values.append(get_lambda(params, sgld_params, checkpoint_no=i))
     plt.clf()
     plt.figure()
     plt.plot(check_list, lambda_values, marker="o")
@@ -280,32 +289,19 @@ def plot_lambda_per_checkpoint(param_file, slgd_params, checkpoints=None):
 
 
 if __name__ == "__main__":
-    # TODO: restrict serach to normal of gradient over training lambda estimate or not - compare results!
-
-    slgd_params = SLGDParams(
+    sgld_params = SGLDParams(
+        gamma=5,
+        epsilon=0.001,
+        n_steps=5000,
+        m=64,
+        restrict_to_orth_grad=True,
+    )
+    plot_lambda_per_checkpoint("experiment_params/exp2.json", sgld_params)
+    sgld_params = SGLDParams(
         gamma=5,
         epsilon=0.001,
         n_steps=5000,
         m=64,
         restrict_to_orth_grad=False,
     )
-    p_values = [17, 29, 37, 43, 53]
-    fnames1 = [f"experiment_params/psweep6/{p}.json" for p in p_values]
-    fnames2 = [f"experiment_params/psweep7/{p}.json" for p in p_values]
-    fnames3 = [f"experiment_params/psweep8/{p}.json" for p in p_values]
-    lambda1 = get_lambda_per_quantity(fnames1, slgd_params)
-    lambda2 = get_lambda_per_quantity(fnames2, slgd_params)
-    lambda3 = get_lambda_per_quantity(fnames3, slgd_params)
-    plt.clf()
-    plt.figure()
-    plt.plot(p_values, lambda1, marker="o", label="Embed Dim = 8, Hidden Dim = 32")
-    plt.plot(p_values, lambda2, marker="o", label="Embed Dim = 16, Hidden Dim = 32")
-    plt.plot(p_values, lambda3, marker="o", label="Embed Dim = 24, Hidden Dim = 64")
-    plt.legend()
-    plt.title(f"$\hat\lambda$ vs $P$")
-    plt.xlabel("$P$")
-    plt.ylabel("$\hat{\lambda}$")
-    plt.savefig(
-        f'plots/lambda_vs_P_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
-    )
-    plt.close()
+    plot_lambda_per_checkpoint("experiment_params/exp2.json", sgld_params)
