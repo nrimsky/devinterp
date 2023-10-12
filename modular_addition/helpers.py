@@ -72,6 +72,7 @@ def get_dft_matrix(P):
 
 def eval_model(model, dataset, device):
     model.eval()
+    model.to(device)
     avg_loss = 0
     loss_fn = t.nn.CrossEntropyLoss()
     with t.no_grad():

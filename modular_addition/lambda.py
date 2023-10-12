@@ -22,7 +22,7 @@ class SGLDParams:
     m: int = 512
     restrict_to_orth_grad: bool = False
     get_updated_model_parameters: Callable = lambda model: model.parameters()
-    log_loss_multiplier: float = 1
+    n_multiplier: float = 1
 
 
 def cross_entropy_loss(logits, y_s):
@@ -36,17 +36,18 @@ def cross_entropy_loss(logits, y_s):
     return -1 * t.mean(t.log(preds[t.arange(len(preds)), y_s] + 1e-6))
 
 
-def sgld(model, sgld_params, dataset, beta, device):
+def sgld(model, sgld_params, dataset, device):
     """
     model: MLP model
     sgld_params: SGLDParams object
     dataset: dataset to train on
-    beta: temperature parameter
+    device: device to run on
 
     returns: updated model, lambda_hat
     """
     n = len(dataset)
     model = model.to(device)
+    beta = 1 / log(n * sgld_params.n_multiplier)
 
     init_loss = eval_model(model, dataset, device)
     n_ln_wstar = n * init_loss
@@ -90,7 +91,7 @@ def sgld(model, sgld_params, dataset, beta, device):
         w = t.nn.utils.parameters_to_vector(model.parameters())
         array_weight_norm.append((w * submodule_param_mask).norm(p=2).item())
         elasticity_loss_term = (sgld_params.gamma / 2) * t.sum(((w_0 - w) ** 2))
-        log_likelihood_loss_term = cross_entropy_loss_value * n * beta * sgld_params.log_loss_multiplier
+        log_likelihood_loss_term = cross_entropy_loss_value * n * beta * sgld_params.n_multiplier
         full_loss = (sgld_params.epsilon / 2) * (
             elasticity_loss_term + log_likelihood_loss_term
         )
@@ -105,8 +106,8 @@ def sgld(model, sgld_params, dataset, beta, device):
                 proj_diff = diff - t.dot(diff, ce_loss_grad_w0) * ce_loss_grad_w0
                 new_params = w_0 + proj_diff
             t.nn.utils.vector_to_parameters(new_params, model.parameters())
-    wbic = n * sum(array_loss) / len(array_loss)
-    lambda_hat = (wbic - n_ln_wstar) / log(n)
+    wbic = sgld_params.n_multiplier * n * sum(array_loss) / len(array_loss)
+    lambda_hat = (wbic - n_ln_wstar) / log(sgld_params.n_multiplier * n)
     print(f"lambda_hat: {lambda_hat}")
     print(f"wbic: {wbic}")
     print(f"n_ln_wstar: {n_ln_wstar}")
@@ -142,7 +143,6 @@ def hyperparameter_search(
         params_modular_addition.train_frac,
         params_modular_addition.random_seed,
     )
-    beta = 1 / log(len(modular_addition_dataset))
     results_random = defaultdict(list)
     results_modular_addition = defaultdict(list)
     for epsilon in epsilon_range:
@@ -163,14 +163,12 @@ def hyperparameter_search(
                 mlp_modular_addition,
                 sgld_params,
                 modular_addition_dataset,
-                beta,
                 params_modular_addition.device,
             )
             _, lambda_hat_random = sgld(
                 mlp_random,
                 sgld_params,
                 random_dataset,
-                beta,
                 params_random.device,
             )
             results_modular_addition[epsilon].append(lambda_hat_modular_addition)
@@ -234,57 +232,113 @@ def get_lambda(params, sgld_params, checkpoint_no=None):
         dataset = make_random_dataset(params.p, params.random_seed)
     else:
         dataset = make_dataset(params.p)
-    train_data, _ = train_test_split(dataset, params.train_frac, params.random_seed)
-    beta = 1 / log(len(train_data))
-    _, lambda_hat = sgld(model, sgld_params, train_data, beta, params.device)
-    return lambda_hat
+    train_data, test_data = train_test_split(dataset, params.train_frac, params.random_seed)
+    test_loss = eval_model(model, test_data, params.device)
+    train_loss = eval_model(model, train_data, params.device)
+    _, lambda_hat = sgld(model, sgld_params, train_data, params.device)
+    return lambda_hat, test_loss, train_loss
 
 def get_lambda_per_quantity(param_files, sgld_params, resample=True):
     lambda_values = []
+    test_losses = []
+    train_losses = []
     for param_file in param_files:
         params = ExperimentParams.load_from_file(param_file)
         if not resample and params.lambda_hat is not None:
             lambda_values.append(params.lambda_hat)
             continue
-        lambda_hat = get_lambda(params, sgld_params)
+        lambda_hat, test_loss, train_loss = get_lambda(params, sgld_params)
         lambda_values.append(lambda_hat)
+        test_losses.append(test_loss)
+        train_losses.append(train_loss)
         param_dict = params.get_dict()
         param_dict["lambda_hat"] = lambda_hat.item()
+        param_dict["test_loss"] = test_loss.item()
+        param_dict["train_loss"] = train_loss.item()
         with open(param_file, "w") as f:
             json.dump(param_dict, f)
-    return lambda_values
+    return lambda_values, test_losses, train_losses
+
 
 def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, sgld_params):
-    lambda_values = get_lambda_per_quantity(param_files, sgld_params)
+    lambda_values, test_losses, train_losses = get_lambda_per_quantity(param_files, sgld_params)
+    
+    # Clear previous plots
     plt.clf()
-    plt.figure()
-    plt.plot(quantity_values, lambda_values, marker="o")
-    plt.title(f"$\lambda$ vs {quantity_name}")
-    plt.xlabel(quantity_name)
-    plt.ylabel("$\hat{\lambda}$")
-    plt.savefig(
+    fig, ax1 = plt.subplots()
+
+    # Plot lambda values on the left y-axis
+    ax1.plot(quantity_values, lambda_values, marker="o", color='g', label="$\hat{\lambda}$")
+    ax1.set_xlabel(quantity_name)
+    ax1.set_ylabel("$\hat{\lambda}$", color='g')
+    ax1.tick_params('y', colors='g')
+    ax1.legend(loc='upper left')
+
+    # Create a second y-axis for the losses
+    ax2 = ax1.twinx()
+    ax2.plot(quantity_values, train_losses, marker="o", color='b', label="train loss", linestyle="--")
+    ax2.plot(quantity_values, test_losses, marker="o", color='r', label="test loss", linestyle="--")
+    ax2.set_ylabel("Loss", color='b')
+    ax2.tick_params('y', colors='b')
+    ax2.legend(loc='upper right')
+
+    # Set title
+    ax1.set_title(f"$\lambda$ vs {quantity_name}")
+
+    # Save the figure
+    fig.savefig(
         f'plots/lambda_vs_{quantity_name.replace(" ", "_")}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
     )
+
     plt.close()
 
 
 def plot_lambda_per_checkpoint(param_file, sgld_params, checkpoints=None):
     lambda_values = []
+    train_losses = []
+    test_losses = []
     params = ExperimentParams.load_from_file(param_file)
     check_list = list(range(params.n_save_model_checkpoints))
     if checkpoints is not None:
         check_list = checkpoints
     for i in check_list:
-        lambda_values.append(get_lambda(params, sgld_params, checkpoint_no=i))
+        lambda_hat, test_loss, train_loss = get_lambda(params, sgld_params, checkpoint_no=i)
+        lambda_values.append(lambda_hat)
+        train_losses.append(train_loss)
+        test_losses.append(test_loss)
+    
+    # Clear previous plots
     plt.clf()
-    plt.figure()
-    plt.plot(check_list, lambda_values, marker="o")
-    plt.title(f"$\lambda$ vs checkpoint")
-    plt.xlabel("checkpoint")
-    plt.ylabel("$\hat{\lambda}$")
-    plt.savefig(
+    fig, ax1 = plt.subplots()
+
+    # Plot lambda values on the left y-axis
+    ax1.plot(check_list, lambda_values, marker="o", color='g', label="$\hat{\lambda}$")
+    ax1.set_xlabel("checkpoint")
+    ax1.set_ylabel("$\hat{\lambda}$", color='g')
+    ax1.tick_params('y', colors='g')
+    ax1.legend(loc='upper left')
+
+    # Create a second y-axis for the losses
+    ax2 = ax1.twinx()
+    ax2.plot(check_list, train_losses, marker="o", color='b', label="train loss", linestyle="--")
+    ax2.plot(check_list, test_losses, marker="o", color='r', label="test loss", linestyle="--")
+    ax2.set_ylabel("Loss", color='b')
+    ax2.tick_params('y', colors='b')
+    ax2.legend(loc='upper right')
+
+    # Set title
+    title = "$\lambda$ vs checkpoint"
+    if sgld_params.restrict_to_orth_grad:
+        title += " (restrict orth dir)"
+    if sgld_params.n_multiplier != 1:
+        title += f" (n*={sgld_params.n_multiplier})"
+    ax1.set_title(title)
+
+    # Save the figure
+    fig.savefig(
         f'plots/lambda_vs_checkpoint_{datetime.now().strftime("%Y%m%d_%H%M%S")}_restrictorth{sgld_params.restrict_to_orth_grad}.png'
     )
+
     plt.close()
 
 
@@ -295,8 +349,9 @@ if __name__ == "__main__":
         n_steps=5000,
         m=64,
         restrict_to_orth_grad=True,
+        n_multiplier=1
     )
-    plot_lambda_per_checkpoint("experiment_params/exp2.json", sgld_params)
+    plot_lambda_per_checkpoint("experiment_params/exp3.json", sgld_params)
     # sgld_params = SGLDParams(
     #     gamma=5,
     #     epsilon=0.001,

@@ -227,31 +227,34 @@ def p_sweep_exp(p_values, params, psweep):
         if params.movie:
             run_movie_cmd(params.get_suffix())
 
+def count_params(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 if __name__ == "__main__":
     params = ExperimentParams(
         linear_1_tied=False,
         tie_unembed=False,
         run_id=0,
-        movie=True,
+        movie=False,
         scale_linear_1_factor=1.0,
         scale_embed=1.0,
         use_random_dataset=False,
         freeze_middle=False,
-        n_batches=3000,
+        n_batches=1500,
         n_save_model_checkpoints=25,
         lr=0.01,
         magnitude=True,
         ablation_fourier=True,
         do_viz_weights_modes=True,
         batch_size=64,
-        num_no_weight_decay_steps=1000,
+        num_no_weight_decay_steps=0,
         embed_dim=8,
         hidden_size=32,
         p=41,
     )
     params.save_to_file(f"models/params_{params.get_suffix()}.json")
     model = MLP(params)
+    print(f"Number of parameters: {count_params(model)}")
     if params.use_random_dataset:
         dataset = make_random_dataset(params.p, params.random_seed)
     else:
