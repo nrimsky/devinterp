@@ -246,19 +246,49 @@ if __name__ == "__main__":
         scale_embed=1.0,
         use_random_dataset=False,
         freeze_middle=False,
-        n_batches=1500,
-        n_save_model_checkpoints=25,
+        n_batches=15000,
+        n_save_model_checkpoints=0,
         lr=0.01,
         magnitude=False,
         ablation_fourier=False,
         do_viz_weights_modes=True,
         batch_size=64,
-        num_no_weight_decay_steps=0,
+        num_no_weight_decay_steps=1000,
         embed_dim=8,
         hidden_size=32,
         p = 53,
     )
     for run in range(5):
         params.run_id = run
-        params.save_to_file(f"experiment_params/checkpoint_sweep/run_{params.run_id}.json")
-        run_exp(params)
+        p_sweep_exp([41, 53], params, "psweep_repeats")
+
+    # for run in range(5):
+    #     params.run_id = run
+    #     params.save_to_file(f"experiment_params/checkpoint_sweep/run_{params.run_id}.json")
+    #     run_exp(params)
+
+    # params = ExperimentParams(
+    #     linear_1_tied=False,
+    #     tie_unembed=False,
+    #     movie=False,
+    #     scale_linear_1_factor=1.0,
+    #     scale_embed=1.0,
+    #     use_random_dataset=False,
+    #     freeze_middle=False,
+    #     n_batches=10000,
+    #     n_save_model_checkpoints=25,
+    #     lr=0.01,
+    #     magnitude=False,
+    #     ablation_fourier=False,
+    #     do_viz_weights_modes=True,
+    #     batch_size=64,
+    #     num_no_weight_decay_steps=1000,
+    #     embed_dim=8,
+    #     hidden_size=32,
+    #     p = 53,
+    # )
+    # params.run_id = 2
+    # for run in range(5):
+    #     params.run_id = run
+    #     params.save_to_file(f"experiment_params/checkpoint_sweep/run_{params.run_id}.json")
+    #     run_exp(params)

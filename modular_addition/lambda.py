@@ -274,7 +274,7 @@ def plot_lambda_test_train_loss(ax1, x_axis, x_label, lambda_values, test_losses
     ax2.plot(x_axis, test_losses, marker="o", color='r', label="test loss", linestyle="--")
     ax2.set_ylabel("Loss", color='b')
     ax2.tick_params('y', colors='b')
-    ax2.legend(loc='upper right')
+    ax2.legend(loc='bottom right')
 
 def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, sgld_params):
     lambda_values, test_losses, train_losses = get_lambda_per_quantity(param_files, sgld_params)
@@ -397,7 +397,6 @@ def plot_lambda_per_p(sgld_params, p_sweep_dir, resample=False):
     test_losses = []
     train_losses = []
     for p in p_values:
-        p_values.append(p)
         lambda_values.append(t.mean(t.tensor([run[0] for run in results[p].values()])))
         test_losses.append(t.mean(t.tensor([run[1] for run in results[p].values()])))
         train_losses.append(t.mean(t.tensor([run[2] for run in results[p].values()])))
