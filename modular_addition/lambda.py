@@ -333,6 +333,44 @@ def plot_lambda_per_checkpoint(param_file, sgld_params, checkpoints=None):
 
     plt.close()
 
+def plot_lambda_per_checkpoint_multi_run(sgld_params, sweep_dir):
+    files = glob(f"{sweep_dir}/*.json")
+    results = defaultdict(dict)
+    for f in files:
+        experiment_params = ExperimentParams.load_from_file(f)
+        run_id = experiment_params.run_id
+        n_checkpoints = experiment_params.n_save_model_checkpoints
+        check_list = list(range(n_checkpoints))
+        for c in check_list:
+            lambda_hat, test_loss, train_loss = get_lambda(experiment_params, sgld_params, checkpoint_no=c)
+            results[run_id][c] = (lambda_hat, test_loss, train_loss)
+    
+    # Clear previous plots
+    plt.clf()
+    fig, ax1 = plt.subplots()
+    # Plot mean lambda, test loss, and train loss per checkpoint (mean over runs)
+    run_ids = sorted(list(results.keys()))
+    lambda_values = []
+    test_losses = []
+    train_losses = []
+    for c in check_list:
+        lambda_values.append(t.mean(t.tensor([run[c][0] for run in results.values()])))
+        test_losses.append(t.mean(t.tensor([run[c][1] for run in results.values()])))
+        train_losses.append(t.mean(t.tensor([run[c][2] for run in results.values()])))
+    plot_lambda_test_train_loss(ax1, check_list, "Checkpoint", lambda_values, test_losses, train_losses)
+
+    # Set title
+    title = "$\lambda$ vs checkpoint"
+    if sgld_params.restrict_to_orth_grad:
+        title += " (restrict orth dir)"
+    if sgld_params.n_multiplier != 1:
+        title += f" (n*={sgld_params.n_multiplier})"
+    ax1.set_title(title)
+
+    # Save the figure
+    fig.savefig(
+        f'plots/lambda_vs_checkpoint_{datetime.now().strftime("%Y%m%d_%H%M%S")}_restrictorth{sgld_params.restrict_to_orth_grad}_meanover_{len(run_ids)}.png'
+    )
 
 def plot_lambda_per_p(sgld_params, p_sweep_dir, resample=False):
     files = glob(f"{p_sweep_dir}/*.json")
@@ -350,26 +388,27 @@ def plot_lambda_per_p(sgld_params, p_sweep_dir, resample=False):
         experiment_params.test_loss = test_loss.item()
         experiment_params.train_loss = train_loss.item()
         experiment_params.save_to_file(f)
+    print("Extracted results", results)
         
     # Plot average lambda, test loss, and train loss per p (mean over runs)
-    plt.clf()
     fig, ax1 = plt.subplots()
-    p_values = []
+    p_values = sorted(list(results.keys()))
     lambda_values = []
     test_losses = []
     train_losses = []
-    for p, run_results in results.items():
+    for p in p_values:
         p_values.append(p)
-        lambda_values.append(t.mean([r[0] for r in run_results.values()]))
-        test_losses.append(t.mean([r[1] for r in run_results.values()]))
-        train_losses.append(t.mean([r[2] for r in run_results.values()]))
+        lambda_values.append(t.mean(t.tensor([run[0] for run in results[p].values()])))
+        test_losses.append(t.mean(t.tensor([run[1] for run in results[p].values()])))
+        train_losses.append(t.mean(t.tensor([run[2] for run in results[p].values()])))
     plot_lambda_test_train_loss(ax1, p_values, "p", lambda_values, test_losses, train_losses)
     fig.savefig(
         f'plots/lambda_vs_p_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
     )
+    print("Saved plot 1")
 
     # Plot lambda (each run is a different color)
-    run_ids = list(results[p_values[0]].keys())
+    run_ids = sorted(list(results[p_values[0]].keys()))
     plt.clf()
     fig, ax1 = plt.subplots()
     for run_id in run_ids:
@@ -384,6 +423,7 @@ def plot_lambda_per_p(sgld_params, p_sweep_dir, resample=False):
     fig.savefig(
         f'plots/lambda_vs_p_runs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
     )
+    print("Saved plot 2")
 
 
 if __name__ == "__main__":

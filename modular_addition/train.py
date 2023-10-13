@@ -193,47 +193,51 @@ def train(model, train_dataset, test_dataset, params):
     return model, mode_loss_history, magnitude_history
 
 
-def p_sweep_exp(p_values, params, psweep):
-    for p in p_values:
-        params.p = p
-        params.save_to_file(f"models/params_{params.get_suffix()}.json")
-        params.save_to_file(f"experiment_params/{psweep}/{p}_{params.run_id}.json")
-        model = MLP(params)
-        if params.use_random_dataset:
-            dataset = make_random_dataset(params.p, params.random_seed)
-        else:
-            dataset = make_dataset(params.p)
-        train_data, test_data = train_test_split(
-            dataset, params.train_frac, params.random_seed
-        )
-        model, mode_loss_history, magnitude_history = train(
-            model=model, train_dataset=train_data, test_dataset=test_data, params=params
-        )
-        t.save(model.state_dict(), f"models/model_{params.get_suffix()}.pt")
-        if params.do_viz_weights_modes:
-            viz_weights_modes(
-                model.embedding.weight.detach().cpu(),
-                params.p,
-                f"plots/final_embeddings_{params.get_suffix()}.png",
-            )
-        if len(mode_loss_history) > 0:
-            plot_mode_ablations(
-                mode_loss_history, f"plots/ablation_{params.get_suffix()}.png"
-            )
-        if len(magnitude_history) > 0:
-            plot_magnitudes(
-                magnitude_history,
-                params.p,
-                f"plots/magnitudes_{params.get_suffix()}.png",
-            )
-        if params.movie:
-            run_movie_cmd(params.get_suffix())
-
 def count_params(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+
+def run_exp(params):
+    params.save_to_file(f"models/params_{params.get_suffix()}.json")
+    model = MLP(params)
+    if params.use_random_dataset:
+        dataset = make_random_dataset(params.p, params.random_seed)
+    else:
+        dataset = make_dataset(params.p)
+    train_data, test_data = train_test_split(
+        dataset, params.train_frac, params.random_seed
+    )
+    model, mode_loss_history, magnitude_history = train(
+        model=model, train_dataset=train_data, test_dataset=test_data, params=params
+    )
+    t.save(model.state_dict(), f"models/model_{params.get_suffix()}.pt")
+    if params.do_viz_weights_modes:
+        viz_weights_modes(
+            model.embedding.weight.detach().cpu(),
+            params.p,
+            f"plots/final_embeddings_{params.get_suffix()}.png",
+        )
+    if len(mode_loss_history) > 0:
+        plot_mode_ablations(
+            mode_loss_history, f"plots/ablation_{params.get_suffix()}.png"
+        )
+    if len(magnitude_history) > 0:
+        plot_magnitudes(
+            magnitude_history,
+            params.p,
+            f"plots/magnitudes_{params.get_suffix()}.png",
+        )
+    if params.movie:
+        run_movie_cmd(params.get_suffix())
+
+def p_sweep_exp(p_values, params, psweep):
+    for p in p_values:
+        params.p = p
+        params.save_to_file(f"experiment_params/{psweep}/{p}_{params.run_id}.json")
+        run_exp(params)
+
+
 if __name__ == "__main__":
-    p_values = [23, 29, 37, 41, 47, 53]
     params = ExperimentParams(
         linear_1_tied=False,
         tie_unembed=False,
@@ -242,17 +246,19 @@ if __name__ == "__main__":
         scale_embed=1.0,
         use_random_dataset=False,
         freeze_middle=False,
-        n_batches=10000,
-        n_save_model_checkpoints=0,
+        n_batches=1500,
+        n_save_model_checkpoints=25,
         lr=0.01,
         magnitude=False,
         ablation_fourier=False,
-        do_viz_weights_modes=False,
+        do_viz_weights_modes=True,
         batch_size=64,
-        num_no_weight_decay_steps=1000,
+        num_no_weight_decay_steps=0,
         embed_dim=8,
         hidden_size=32,
+        p = 53,
     )
     for run in range(5):
         params.run_id = run
-        p_sweep_exp(p_values, params, "psweep_repeats")
+        params.save_to_file(f"experiment_params/checkpoint_sweep/run_{params.run_id}.json")
+        run_exp(params)
