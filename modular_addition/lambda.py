@@ -12,6 +12,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable
 import json
+from glob import glob
 
 
 @dataclass
@@ -259,6 +260,21 @@ def get_lambda_per_quantity(param_files, sgld_params, resample=True):
             json.dump(param_dict, f)
     return lambda_values, test_losses, train_losses
 
+def plot_lambda_test_train_loss(ax1, x_axis, x_label, lambda_values, test_losses, train_losses):
+    # Plot lambda values on the left y-axis
+    ax1.plot(x_axis, lambda_values, marker="o", color='g', label="$\hat{\lambda}$")
+    ax1.set_xlabel(x_label)
+    ax1.set_ylabel("$\hat{\lambda}$", color='g')
+    ax1.tick_params('y', colors='g')
+    ax1.legend(loc='upper left')
+
+    # Create a second y-axis for the losses
+    ax2 = ax1.twinx()
+    ax2.plot(x_axis, train_losses, marker="o", color='b', label="train loss", linestyle="--")
+    ax2.plot(x_axis, test_losses, marker="o", color='r', label="test loss", linestyle="--")
+    ax2.set_ylabel("Loss", color='b')
+    ax2.tick_params('y', colors='b')
+    ax2.legend(loc='upper right')
 
 def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, sgld_params):
     lambda_values, test_losses, train_losses = get_lambda_per_quantity(param_files, sgld_params)
@@ -267,20 +283,7 @@ def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, sgld_p
     plt.clf()
     fig, ax1 = plt.subplots()
 
-    # Plot lambda values on the left y-axis
-    ax1.plot(quantity_values, lambda_values, marker="o", color='g', label="$\hat{\lambda}$")
-    ax1.set_xlabel(quantity_name)
-    ax1.set_ylabel("$\hat{\lambda}$", color='g')
-    ax1.tick_params('y', colors='g')
-    ax1.legend(loc='upper left')
-
-    # Create a second y-axis for the losses
-    ax2 = ax1.twinx()
-    ax2.plot(quantity_values, train_losses, marker="o", color='b', label="train loss", linestyle="--")
-    ax2.plot(quantity_values, test_losses, marker="o", color='r', label="test loss", linestyle="--")
-    ax2.set_ylabel("Loss", color='b')
-    ax2.tick_params('y', colors='b')
-    ax2.legend(loc='upper right')
+    plot_lambda_test_train_loss(ax1, quantity_values, quantity_name, lambda_values, test_losses, train_losses)
 
     # Set title
     ax1.set_title(f"$\lambda$ vs {quantity_name}")
@@ -291,6 +294,7 @@ def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, sgld_p
     )
 
     plt.close()
+
 
 
 def plot_lambda_per_checkpoint(param_file, sgld_params, checkpoints=None):
@@ -312,19 +316,7 @@ def plot_lambda_per_checkpoint(param_file, sgld_params, checkpoints=None):
     fig, ax1 = plt.subplots()
 
     # Plot lambda values on the left y-axis
-    ax1.plot(check_list, lambda_values, marker="o", color='g', label="$\hat{\lambda}$")
-    ax1.set_xlabel("checkpoint")
-    ax1.set_ylabel("$\hat{\lambda}$", color='g')
-    ax1.tick_params('y', colors='g')
-    ax1.legend(loc='upper left')
-
-    # Create a second y-axis for the losses
-    ax2 = ax1.twinx()
-    ax2.plot(check_list, train_losses, marker="o", color='b', label="train loss", linestyle="--")
-    ax2.plot(check_list, test_losses, marker="o", color='r', label="test loss", linestyle="--")
-    ax2.set_ylabel("Loss", color='b')
-    ax2.tick_params('y', colors='b')
-    ax2.legend(loc='upper right')
+    plot_lambda_test_train_loss(ax1, check_list, "Checkpoint", lambda_values, test_losses, train_losses)
 
     # Set title
     title = "$\lambda$ vs checkpoint"
@@ -342,6 +334,58 @@ def plot_lambda_per_checkpoint(param_file, sgld_params, checkpoints=None):
     plt.close()
 
 
+def plot_lambda_per_p(sgld_params, p_sweep_dir, resample=False):
+    files = glob(f"{p_sweep_dir}/*.json")
+    results = defaultdict(dict)
+    for f in files:
+        experiment_params = ExperimentParams.load_from_file(f)
+        p = experiment_params.p
+        run_id = experiment_params.run_id
+        if not resample and all([experiment_params.lambda_hat is not None, experiment_params.test_loss is not None, experiment_params.train_loss is not None]):
+            results[p][run_id] = (experiment_params.lambda_hat, experiment_params.test_loss, experiment_params.train_loss)
+            continue
+        lambda_hat, test_loss, train_loss = get_lambda(experiment_params, sgld_params)
+        results[p][run_id] = (lambda_hat, test_loss, train_loss)
+        experiment_params.lambda_hat = lambda_hat.item()
+        experiment_params.test_loss = test_loss.item()
+        experiment_params.train_loss = train_loss.item()
+        experiment_params.save_to_file(f)
+        
+    # Plot average lambda, test loss, and train loss per p (mean over runs)
+    plt.clf()
+    fig, ax1 = plt.subplots()
+    p_values = []
+    lambda_values = []
+    test_losses = []
+    train_losses = []
+    for p, run_results in results.items():
+        p_values.append(p)
+        lambda_values.append(t.mean([r[0] for r in run_results.values()]))
+        test_losses.append(t.mean([r[1] for r in run_results.values()]))
+        train_losses.append(t.mean([r[2] for r in run_results.values()]))
+    plot_lambda_test_train_loss(ax1, p_values, "p", lambda_values, test_losses, train_losses)
+    fig.savefig(
+        f'plots/lambda_vs_p_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+    )
+
+    # Plot lambda (each run is a different color)
+    run_ids = list(results[p_values[0]].keys())
+    plt.clf()
+    fig, ax1 = plt.subplots()
+    for run_id in run_ids:
+        lambda_values = []
+        for p in p_values:
+            lambda_values.append(results[p][run_id][0])
+        ax1.plot(p_values, lambda_values, marker="o", label=f"Run {run_id}")
+    ax1.set_xlabel("p")
+    ax1.set_ylabel("$\hat{\lambda}$")
+    ax1.legend(loc='upper left')
+    ax1.set_title("$\lambda$ vs p")
+    fig.savefig(
+        f'plots/lambda_vs_p_runs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+    )
+
+
 if __name__ == "__main__":
     sgld_params = SGLDParams(
         gamma=5,
@@ -351,12 +395,4 @@ if __name__ == "__main__":
         restrict_to_orth_grad=True,
         n_multiplier=1
     )
-    plot_lambda_per_checkpoint("experiment_params/exp3.json", sgld_params)
-    # sgld_params = SGLDParams(
-    #     gamma=5,
-    #     epsilon=0.001,
-    #     n_steps=5000,
-    #     m=64,
-    #     restrict_to_orth_grad=False,
-    # )
-    # plot_lambda_per_checkpoint("experiment_params/exp2.json", sgld_params)
+    plot_lambda_per_p(sgld_params, "experiment_params/psweep_repeats")
