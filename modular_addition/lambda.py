@@ -263,20 +263,20 @@ def get_lambda_per_quantity(param_files, sgld_params, resample=True):
 def plot_lambda_test_train_loss(ax1, x_axis, x_label, lambda_values, test_losses, train_losses):
     # Plot lambda values on the left y-axis
     ax1.plot(x_axis, lambda_values, marker="o", label="$\hat{\lambda}$")
-    ax1.plot(x_axis, [4 * x for x in x_axis], label="y=4x", linestyle="--")
+    ax1.plot(x_axis, [8 * x for x in x_axis], label="y=8x", linestyle="--")
     ax1.set_xlabel(x_label)
     ax1.set_ylabel("$\hat{\lambda}$")
-    ax1.tick_params('y', colors='g')
+    # ax1.tick_params('y', colors='g')
 
     ax1.legend(loc='upper left')
 
     # Create a second y-axis for the losses
-    ax2 = ax1.twinx()
-    ax2.plot(x_axis, train_losses, marker="o", color='b', label="train loss", linestyle="--")
-    ax2.plot(x_axis, test_losses, marker="o", color='r', label="test loss", linestyle="--")
-    ax2.set_ylabel("Loss", color='b')
-    ax2.tick_params('y', colors='b')
-    ax2.legend(loc='lower right')
+    # ax2 = ax1.twinx()
+    # ax2.plot(x_axis, train_losses, marker="o", color='b', label="train loss", linestyle="--")
+    # ax2.plot(x_axis, test_losses, marker="o", color='r', label="test loss", linestyle="--")
+    # ax2.set_ylabel("Loss", color='b')
+    # ax2.tick_params('y', colors='b')
+    # ax2.legend(loc='lower right')
 
 def plot_lambda_per_quantity(param_files, quantity_values, quantity_name, sgld_params):
     lambda_values, test_losses, train_losses = get_lambda_per_quantity(param_files, sgld_params)
