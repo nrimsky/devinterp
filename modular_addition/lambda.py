@@ -262,10 +262,12 @@ def get_lambda_per_quantity(param_files, sgld_params, resample=True):
 
 def plot_lambda_test_train_loss(ax1, x_axis, x_label, lambda_values, test_losses, train_losses):
     # Plot lambda values on the left y-axis
-    ax1.plot(x_axis, lambda_values, marker="o", color='g', label="$\hat{\lambda}$")
+    ax1.plot(x_axis, lambda_values, marker="o", label="$\hat{\lambda}$")
+    ax1.plot(x_axis, [4 * x for x in x_axis], label="y=4x", linestyle="--")
     ax1.set_xlabel(x_label)
-    ax1.set_ylabel("$\hat{\lambda}$", color='g')
+    ax1.set_ylabel("$\hat{\lambda}$")
     ax1.tick_params('y', colors='g')
+
     ax1.legend(loc='upper left')
 
     # Create a second y-axis for the losses
@@ -401,6 +403,7 @@ def plot_lambda_per_p(sgld_params, p_sweep_dir, resample=False):
         test_losses.append(t.mean(t.tensor([run[1] for run in results[p].values()])))
         train_losses.append(t.mean(t.tensor([run[2] for run in results[p].values()])))
     plot_lambda_test_train_loss(ax1, p_values, "p", lambda_values, test_losses, train_losses)
+    ax1.set_title("$\lambda$ vs p")
     fig.savefig(
         f'plots/lambda_vs_p_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
     )
