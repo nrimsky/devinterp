@@ -19,5 +19,5 @@ def experiment(params, a, model_fname):
 
 
 if __name__ == "__main__":
-    params = ExperimentParams.load_from_file("experiment_params/exp2.json")
+    params = ExperimentParams.load_from_file("exp_params/exp2.json")
     experiment(params, 17, f"models/model_{params.get_suffix()}.pt")

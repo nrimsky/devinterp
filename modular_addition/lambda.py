@@ -339,12 +339,12 @@ def plot_lambda_per_checkpoint_multi_run(sgld_params, sweep_dir):
     files = glob(f"{sweep_dir}/*.json")
     results = defaultdict(dict)
     for f in files:
-        experiment_params = ExperimentParams.load_from_file(f)
-        run_id = experiment_params.run_id
-        n_checkpoints = experiment_params.n_save_model_checkpoints
+        exp_params = ExperimentParams.load_from_file(f)
+        run_id = exp_params.run_id
+        n_checkpoints = exp_params.n_save_model_checkpoints
         check_list = list(range(n_checkpoints))
         for c in check_list:
-            lambda_hat, test_loss, train_loss = get_lambda(experiment_params, sgld_params, checkpoint_no=c)
+            lambda_hat, test_loss, train_loss = get_lambda(exp_params, sgld_params, checkpoint_no=c)
             results[run_id][c] = (lambda_hat, test_loss, train_loss)
     
     # Clear previous plots
@@ -378,18 +378,18 @@ def plot_lambda_per_p(sgld_params, p_sweep_dir, resample=False):
     files = glob(f"{p_sweep_dir}/*.json")
     results = defaultdict(dict)
     for f in files:
-        experiment_params = ExperimentParams.load_from_file(f)
-        p = experiment_params.p
-        run_id = experiment_params.run_id
-        if not resample and all([experiment_params.lambda_hat is not None, experiment_params.test_loss is not None, experiment_params.train_loss is not None]):
-            results[p][run_id] = (experiment_params.lambda_hat, experiment_params.test_loss, experiment_params.train_loss)
+        exp_params = ExperimentParams.load_from_file(f)
+        p = exp_params.p
+        run_id = exp_params.run_id
+        if not resample and all([exp_params.lambda_hat is not None, exp_params.test_loss is not None, exp_params.train_loss is not None]):
+            results[p][run_id] = (exp_params.lambda_hat, exp_params.test_loss, exp_params.train_loss)
             continue
-        lambda_hat, test_loss, train_loss = get_lambda(experiment_params, sgld_params)
+        lambda_hat, test_loss, train_loss = get_lambda(exp_params, sgld_params)
         results[p][run_id] = (lambda_hat, test_loss, train_loss)
-        experiment_params.lambda_hat = lambda_hat.item()
-        experiment_params.test_loss = test_loss.item()
-        experiment_params.train_loss = train_loss.item()
-        experiment_params.save_to_file(f)
+        exp_params.lambda_hat = lambda_hat.item()
+        exp_params.test_loss = test_loss.item()
+        exp_params.train_loss = train_loss.item()
+        exp_params.save_to_file(f)
     print("Extracted results", results)
         
     # Plot average lambda, test loss, and train loss per p (mean over runs)
@@ -427,6 +427,45 @@ def plot_lambda_per_p(sgld_params, p_sweep_dir, resample=False):
     )
     print("Saved plot 2")
 
+def plot_lambda_per_p_different_exps(exp_dirs, exp_names, sgld_params, resample=False):
+    """
+    exp_dirs: list of directories containing experiment params json files corresponding to different p value sweeps
+    exp_names: name of experiment being run for that p sweep
+    sgld_params: SGLDParams object - SGLD settings
+    resample: whether to resample if lambda already saved 
+    """
+    results = defaultdict(lambda: defaultdict(list))
+    for i, d in enumerate(exp_dirs):
+        files = glob(f"{d}/*.json")
+        for f in files:
+            exp_params = ExperimentParams.load_from_file(f)
+            p = exp_params.p
+            if not resample and exp_params.lambda_hat is not None:
+                results[exp_names[i]][p].append(exp_params.lambda_hat)
+            else:
+                lambda_hat, _, _ = get_lambda(exp_params, sgld_params)
+                results[exp_names[i]][p].append(lambda_hat.item())
+                exp_params.lambda_hat = lambda_hat.item()
+                exp_params.save_to_file(f)
+    
+    # lambda per p for each exp on same plot
+    plt.clf()
+    fig = plt.figure(figsize=(6, 6))
+    for n in exp_names:
+        p_values = sorted(list(results[n].keys()))
+        lambda_values = []
+        for p in p_values:
+            l = sum(results[n][p])  / len(results[n][p])
+            lambda_values.append(l)
+        plt.plot(p_values, lambda_values, marker="o", label=n, linestyle="--")
+    plt.xlabel("p")
+    plt.ylabel("$\hat{\lambda}$")
+    plt.legend()
+    plt.title("$\lambda$ vs p")
+    fig.savefig(
+        f'plots/lambda_vs_p_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+    )
+
 
 if __name__ == "__main__":
     sgld_params = SGLDParams(
@@ -437,4 +476,7 @@ if __name__ == "__main__":
         restrict_to_orth_grad=True,
         n_multiplier=1
     )
-    plot_lambda_per_checkpoint("experiment_params/checkpoint_sweep/run_3.json", sgld_params)
+    exp_dirs = ["EXPemb_8_mid_64", "EXPemb_12_mid_64", "EXPemb_16_mid_96", "emb_8_mid_32", "emb_16_mid_32", "emb_16_mid_64", "emb_16_mid_64_random", "EXPemb_16_mid_96_RANDOM"]
+    exp_dirs = [f"exp_params/{d}" for d in exp_dirs]
+    exp_names = ["emb 8, hid 64", "emb 12, hid 64", "emb 16, hid 96", "emb 8, hid 32", "emb 16, hid 32", "emb 16, hid 64", "emb 16, hid 64, random", "emb 16, hid 96, random"]
+    plot_lambda_per_p_different_exps(exp_dirs, exp_names, sgld_params, resample=False)

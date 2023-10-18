@@ -233,7 +233,7 @@ def run_exp(params):
 def p_sweep_exp(p_values, params, psweep):
     for p in p_values:
         params.p = p
-        params.save_to_file(f"experiment_params/{psweep}/{p}_{params.run_id}.json")
+        params.save_to_file(f"exp_params/{psweep}/{p}_{params.run_id}.json")
         run_exp(params)
 
 
@@ -246,18 +246,18 @@ if __name__ == "__main__":
         scale_embed=1.0,
         use_random_dataset=False,
         freeze_middle=False,
-        n_batches=20000,
+        n_batches=30000,
         n_save_model_checkpoints=0,
         lr=0.01,
         magnitude=False,
         ablation_fourier=False,
-        do_viz_weights_modes=False,
+        do_viz_weights_modes=True,
         batch_size=64,
-        num_no_weight_decay_steps=0,
-        weight_decay=0.0,
-        embed_dim=16,
-        hidden_size=64,
-        p = 53,
-        run_id=0
+        num_no_weight_decay_steps=2000,
+        run_id=1
     )
-    p_sweep_exp([5, 10, 15, 20, 25, 30, 35], params, "psweep_random")
+    params.hidden_size = 96
+    params.embed_dim = 16
+    params.use_random_dataset = False
+    p_sweep_exp([41], params, "EXPemb_16_mid_96")
+    
