@@ -476,7 +476,4 @@ if __name__ == "__main__":
         restrict_to_orth_grad=True,
         n_multiplier=1
     )
-    exp_dirs = ["EXPemb_8_mid_64", "EXPemb_12_mid_64", "EXPemb_16_mid_96", "emb_8_mid_32", "emb_16_mid_32", "emb_16_mid_64", "emb_16_mid_64_random", "EXPemb_16_mid_96_RANDOM"]
-    exp_dirs = [f"exp_params/{d}" for d in exp_dirs]
-    exp_names = ["emb 8, hid 64", "emb 12, hid 64", "emb 16, hid 96", "emb 8, hid 32", "emb 16, hid 32", "emb 16, hid 64", "emb 16, hid 64, random", "emb 16, hid 96, random"]
-    plot_lambda_per_p_different_exps(exp_dirs, exp_names, sgld_params, resample=False)
+    plot_lambda_per_p(sgld_params, 'exp_params/psweep_96_16', resample=False)

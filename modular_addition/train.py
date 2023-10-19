@@ -246,18 +246,18 @@ if __name__ == "__main__":
         scale_embed=1.0,
         use_random_dataset=False,
         freeze_middle=False,
-        n_batches=30000,
+        n_batches=20000,
         n_save_model_checkpoints=0,
         lr=0.01,
         magnitude=False,
         ablation_fourier=False,
         do_viz_weights_modes=True,
         batch_size=64,
-        num_no_weight_decay_steps=2000,
-        run_id=1
+        num_no_weight_decay_steps=1000,
+        run_id=2
     )
     params.hidden_size = 96
     params.embed_dim = 16
     params.use_random_dataset = False
-    p_sweep_exp([41], params, "EXPemb_16_mid_96")
+    p_sweep_exp([17, 23, 29, 37, 47, 53, 59, 67, 79, 89, 97], params, "psweep_96_16")
     
