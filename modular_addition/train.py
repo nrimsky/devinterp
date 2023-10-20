@@ -46,6 +46,7 @@ class ExperimentParams:
     n_save_model_checkpoints: int = 0
     do_viz_weights_modes: bool = True
     num_no_weight_decay_steps: int = 0
+    activation: str = "gelu"
     lambda_hat: Optional[float] = None  # Gets populated by running SGLD estimator code
     test_loss: Optional[float] = None  # Gets populated by running SGLD estimator code
     train_loss: Optional[float] = None  # Gets populated by running SGLD estimator code
@@ -254,10 +255,11 @@ if __name__ == "__main__":
         do_viz_weights_modes=True,
         batch_size=64,
         num_no_weight_decay_steps=1000,
-        run_id=2
+        run_id=3,
+        activation="quad"
     )
     params.hidden_size = 96
     params.embed_dim = 16
     params.use_random_dataset = False
-    p_sweep_exp([17, 23, 29, 37, 47, 53, 59, 67, 79, 89, 97], params, "psweep_96_16")
+    p_sweep_exp([23, 29, 37, 47, 53, 59, 67, 79, 89], params, "psweep_96_16_quad")
     

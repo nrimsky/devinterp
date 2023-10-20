@@ -476,4 +476,4 @@ if __name__ == "__main__":
         restrict_to_orth_grad=True,
         n_multiplier=1
     )
-    plot_lambda_per_p(sgld_params, 'exp_params/psweep_96_16', resample=False)
+    plot_lambda_per_p_different_exps(['exp_params/psweep_96_16_quad', 'exp_params/psweep_96_16'], ['Quadratic activation', 'GELU activation'],sgld_params)

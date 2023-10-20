@@ -12,7 +12,14 @@ class MLP(t.nn.Module):
             self.linear2 = t.nn.Linear(params.hidden_size, params.embed_dim, bias=True)
         else:
             self.linear2 = t.nn.Linear(params.hidden_size, params.p, bias=False)
-        self.gelu = t.nn.GELU()
+        if params.activation == "relu":
+            self.act = t.nn.ReLU()
+        elif params.activation == "gelu":
+            self.act = t.nn.GELU()
+        elif params.activation == "quad":
+            self.act = lambda x: x ** 2
+        else:
+            raise ValueError(f"Unknown activation function {params.activation}")
         self.vocab_size = params.p
         self.linear1r.weight.data *= params.scale_linear_1_factor
         self.linear1l.weight.data *= params.scale_linear_1_factor
@@ -31,7 +38,7 @@ class MLP(t.nn.Module):
             x1 = self.linear1l(x1)
             x2 = self.linear1r(x2)
         x = x1 + x2
-        x = self.gelu(x)
+        x = self.act(x)
         x = self.linear2(x)
 
         if self.params.save_activations:
