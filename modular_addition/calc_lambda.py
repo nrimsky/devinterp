@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from typing import Callable
 import json
 from glob import glob
-
+from model_viz import viz_weights_modes
+from movie import run_movie_cmd
 
 @dataclass
 class SGLDParams:
@@ -24,6 +25,7 @@ class SGLDParams:
     restrict_to_orth_grad: bool = False
     get_updated_model_parameters: Callable = lambda model: model.parameters()
     n_multiplier: float = 1
+    movie: bool = False
 
 
 def cross_entropy_loss(logits, y_s):
@@ -80,7 +82,10 @@ def sgld(model, sgld_params, dataset, device):
     array_weight_norm = []
     full_losses = []
 
-    for _ in tqdm(range(sgld_params.n_steps)):
+    frame_every = sgld_params.n_steps // 50
+
+    step = 0
+    for sgld_step in tqdm(range(sgld_params.n_steps)):
         batch_idx = random.choices(idx, k=sgld_params.m)
         X_1 = t.stack([dataset[b][0][0] for b in batch_idx]).to(device)
         X_2 = t.stack([dataset[b][0][1] for b in batch_idx]).to(device)
@@ -107,6 +112,14 @@ def sgld(model, sgld_params, dataset, device):
                 proj_diff = diff - t.dot(diff, ce_loss_grad_w0) * ce_loss_grad_w0
                 new_params = w_0 + proj_diff
             t.nn.utils.vector_to_parameters(new_params, model.parameters())
+
+        if sgld_step % frame_every == 0 and sgld_params.movie:
+            viz_weights_modes(
+                model.embedding.weight.detach().cpu(),
+                out.shape[-1],
+                f"frames/embeddings_movie_{step:06}.png",
+            )
+            step += 1
     wbic = sgld_params.n_multiplier * n * sum(array_loss) / len(array_loss)
     lambda_hat = (wbic - n_ln_wstar) / log(sgld_params.n_multiplier * n)
     print(f"lambda_hat: {lambda_hat}")
@@ -117,6 +130,8 @@ def sgld(model, sgld_params, dataset, device):
     print(f"array_loss: {array_loss[::len(array_loss)//20]}")
     print(f"array_weight_norm: {array_weight_norm[::len(array_weight_norm)//20]}")
     print(f"full_losses: {full_losses[::len(full_losses)//20]}")
+    if sgld_params.movie:
+        run_movie_cmd("sgld")
     return model, lambda_hat
 
 
@@ -466,6 +481,39 @@ def plot_lambda_per_p_different_exps(exp_dirs, exp_names, sgld_params, resample=
         f'plots/lambda_vs_p_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
     )
 
+def plot_lambda_per_frac(sgld_params, frac_sweep_dir, resample=False):
+    files = glob(f"{frac_sweep_dir}/*.json")
+    results = defaultdict(dict)
+    for f in files:
+        exp_params = ExperimentParams.load_from_file(f)
+        frac = exp_params.train_frac
+        run_id = exp_params.run_id
+        if not resample and all([exp_params.lambda_hat is not None, exp_params.test_loss is not None, exp_params.train_loss is not None]):
+            results[frac][run_id] = (exp_params.lambda_hat, exp_params.test_loss, exp_params.train_loss)
+            continue
+        lambda_hat, test_loss, train_loss = get_lambda(exp_params, sgld_params)
+        results[frac][run_id] = (lambda_hat, test_loss, train_loss)
+        exp_params.lambda_hat = lambda_hat.item()
+        exp_params.test_loss = test_loss.item()
+        exp_params.train_loss = train_loss.item()
+        exp_params.save_to_file(f)
+    print("Extracted results", results)
+        
+    # Plot average lambda, test loss, and train loss per p (mean over runs)
+    fig, ax1 = plt.subplots()
+    frac_values = sorted(list(results.keys()))
+    lambda_values = []
+    test_losses = []
+    train_losses = []
+    for frac in frac_values:
+        lambda_values.append(t.mean(t.tensor([run[0] for run in results[frac].values()])))
+        test_losses.append(t.mean(t.tensor([run[1] for run in results[frac].values()])))
+        train_losses.append(t.mean(t.tensor([run[2] for run in results[frac].values()])))
+    plot_lambda_test_train_loss(ax1, frac_values, "train_frac", lambda_values, test_losses, train_losses)
+    ax1.set_title("$\lambda$ vs train_frac")
+    fig.savefig(
+        f'plots/lambda_vs_frac_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+    )
 
 if __name__ == "__main__":
     sgld_params = SGLDParams(
@@ -474,6 +522,7 @@ if __name__ == "__main__":
         n_steps=5000,
         m=64,
         restrict_to_orth_grad=True,
-        n_multiplier=1
+        n_multiplier=1,
+        movie=True
     )
-    plot_lambda_per_p_different_exps(['exp_params/psweep_96_16_quad', 'exp_params/psweep_96_16'], ['Quadratic activation', 'GELU activation'],sgld_params)
+    plot_lambda_per_frac(sgld_params=sgld_params, frac_sweep_dir="exp_params/large_model", resample=True)
