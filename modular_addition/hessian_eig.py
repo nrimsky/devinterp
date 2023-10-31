@@ -24,6 +24,7 @@ def hessian_eig(
         params.random_seed,
     )
     model = MLP(params)
+    model = model.to(device)
     param_extract_fn = param_extract_fn or (lambda x: x.parameters())
     num_params = sum(p.numel() for p in param_extract_fn(model))
 
