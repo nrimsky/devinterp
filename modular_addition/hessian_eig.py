@@ -1,11 +1,12 @@
 import torch as t
 from torch.autograd import grad
 from scipy.sparse.linalg import LinearOperator, eigsh
-import numpy as np
 from calc_lambda import cross_entropy_loss
 from train import ExperimentParams
 from dataset import make_dataset, train_test_split
 from model import MLP
+from matplotlib import pyplot as plt
+from datetime import datetime
 
 def get_weight_norm(model):
     return sum((p ** 2).sum() for p in model.parameters() if p.requires_grad)
@@ -13,7 +14,7 @@ def get_weight_norm(model):
 def hessian_eig(
     params_file: str,
     device="cuda",
-    n_top_vectors=500,
+    n_top_vectors=300,
     param_extract_fn=None
 ):
     params = ExperimentParams.load_from_file(params_file)
@@ -55,11 +56,21 @@ def hessian_eig(
         linear_operator,
         k=n_top_vectors,
         tol=0.0001,
-        which="LM",
+        which="LA",
         return_eigenvectors=True,
     )
-    return eigenvalues
+    return eigenvalues[::-1]
 
 
 if __name__ == "__main__":
-    hessian_eig("exp_params/large_model/0.95_0.json")
+    filename = "exp_params/frac_sweep/0.95_0.json"
+    eigs = hessian_eig(filename, param_extract_fn=lambda x: x.parameters())
+    for i, e in enumerate(eigs):
+        print(f"#{i}: {e}")
+    params = ExperimentParams.load_from_file(filename)
+    plt.plot(eigs, "o", markersize=2)
+    plt.xlabel("Eigenvalue index")
+    plt.ylabel("Eigenvalue")
+    plt.savefig(f"plots/eig/eigenvalues_{params.get_suffix()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+
+

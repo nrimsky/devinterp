@@ -36,7 +36,7 @@ def cross_entropy_loss(logits, y_s):
     returns: mean cross entropy loss
     """
     preds = t.nn.functional.softmax(logits, dim=1)
-    return -1 * t.mean(t.log(preds[t.arange(len(preds)), y_s] + 1e-6))
+    return -1 * t.mean(t.log(preds[t.arange(len(preds)), y_s] + 1e-7))
 
 
 def sgld(model, sgld_params, dataset, device):
@@ -525,4 +525,4 @@ if __name__ == "__main__":
         n_multiplier=1,
         movie=True
     )
-    plot_lambda_per_frac(sgld_params=sgld_params, frac_sweep_dir="exp_params/large_model", resample=True)
+    plot_lambda_per_p
