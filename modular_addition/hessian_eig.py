@@ -63,7 +63,7 @@ def hessian_eig(
 
 
 if __name__ == "__main__":
-    filename = "exp_params/frac_sweep/0.95_0.json"
+    filename = "exp_params/EXPemb_24_mid_64_RANDOM/29_1.json"
     eigs = hessian_eig(filename, param_extract_fn=lambda x: x.parameters())
     for i, e in enumerate(eigs):
         print(f"#{i}: {e}")

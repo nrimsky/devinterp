@@ -517,12 +517,12 @@ def plot_lambda_per_frac(sgld_params, frac_sweep_dir, resample=False):
 
 if __name__ == "__main__":
     sgld_params = SGLDParams(
-        gamma=5,
-        epsilon=0.001,
+        gamma=50,
+        epsilon=0.0001,
         n_steps=5000,
         m=64,
         restrict_to_orth_grad=True,
         n_multiplier=1,
-        movie=True
+        # movie=True
     )
-    plot_lambda_per_p
+    plot_lambda_per_checkpoint("exp_params/slow/0.55_0.json", sgld_params)

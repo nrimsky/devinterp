@@ -253,20 +253,20 @@ if __name__ == "__main__":
         scale_embed=1.0,
         use_random_dataset=False,
         freeze_middle=False,
-        n_batches=30000,
-        n_save_model_checkpoints=0,
-        lr=0.005,
+        n_batches=10000,
+        n_save_model_checkpoints=25,
+        lr=0.002,
         magnitude=False,
         ablation_fourier=False,
         do_viz_weights_modes=True,
         batch_size=64,
-        num_no_weight_decay_steps=10000,
+        num_no_weight_decay_steps=0,
         run_id=0,
-        activation="quad",
-        p=41,
+        activation="gelu",
+        p=23,
     )
     params.hidden_size = 144
     params.embed_dim = 36
     params.use_random_dataset = False
-    frac_sweep_exp([0.95], params, "large_model")
+    frac_sweep_exp([0.55], params, "slow")
     
