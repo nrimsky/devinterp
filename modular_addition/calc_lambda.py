@@ -18,6 +18,7 @@ from movie import run_movie_cmd
 import os
 from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
+from dynamics import get_magnitude_modes
 
 @dataclass
 class SGLDParams:
@@ -30,6 +31,8 @@ class SGLDParams:
     n_multiplier: float = 1
     movie: bool = False
     num_point_samples: Optional[int] = None
+    n_magnitude_samples: Optional[int] = None
+    weight_decay: float = 0
 
 
 def cross_entropy_loss(logits, y_s):
@@ -88,6 +91,7 @@ def sgld(model, sgld_params, dataset, device):
     array_loss = []
     array_weight_norm = []
     full_losses = []
+    magnitude_modes = []
 
     frame_every = sgld_params.n_steps // 50
     sample_every = None
@@ -99,6 +103,9 @@ def sgld(model, sgld_params, dataset, device):
         files = glob("point_samples/*.json")
         for f in files:
             os.remove(f)
+    mag_every = None
+    if sgld_params.n_magnitude_samples is not None:
+        mag_every = sgld_params.n_steps // sgld_params.n_magnitude_samples
     step = 0
     for sgld_step in tqdm(range(sgld_params.n_steps)):
         batch_idx = random.choices(idx, k=sgld_params.m)
@@ -112,9 +119,10 @@ def sgld(model, sgld_params, dataset, device):
         w = t.nn.utils.parameters_to_vector(model.parameters())
         array_weight_norm.append((w * submodule_param_mask).norm(p=2).item())
         elasticity_loss_term = (sgld_params.gamma / 2) * t.sum(((w_0 - w) ** 2))
+        weight_size_term =  t.sum(w ** 2) * (sgld_params.weight_decay / 2) * n * beta * sgld_params.n_multiplier
         log_likelihood_loss_term = cross_entropy_loss_value * n * beta * sgld_params.n_multiplier
         full_loss = (sgld_params.epsilon / 2) * (
-            elasticity_loss_term + log_likelihood_loss_term
+            elasticity_loss_term + log_likelihood_loss_term + weight_size_term
         )
         full_losses.append((elasticity_loss_term.item(), log_likelihood_loss_term.item()))
         full_loss.backward()
@@ -146,9 +154,14 @@ def sgld(model, sgld_params, dataset, device):
                     }
                     with open(f"point_samples/point_sample_{sgld_step:06}.json", "w") as f:
                         json.dump(data, f)
-
-
-
+        if mag_every is not None:
+            if sgld_step % mag_every == 0:
+                with t.no_grad():
+                    p = model.embedding.weight.shape[0]
+                    modes = get_magnitude_modes(model.embedding.weight.detach().cpu(), p)
+                    modes = modes.tolist()
+                    modes = modes[1:p//2 + 1]
+                    magnitude_modes.append(modes)
     wbic = sgld_params.n_multiplier * n * sum(array_loss) / len(array_loss)
     lambda_hat = (wbic - n_ln_wstar) / log(sgld_params.n_multiplier * n)
     print(f"lambda_hat: {lambda_hat}")
@@ -162,10 +175,43 @@ def sgld(model, sgld_params, dataset, device):
     if sgld_params.movie:
         run_movie_cmd("sgld")
     if sgld_params.num_point_samples is not None:
-        point_sample_pca()
+        point_sample_pca(colormapping_loss=True)
+    if len(magnitude_modes) > 0:
+        # Get indices of largest 2 modes at init
+        init_modes = magnitude_modes[0]
+        init_modes = sorted(range(len(init_modes)), key=lambda i: init_modes[i], reverse=True)
+        mode_1 = init_modes[0]
+        mode_2 = init_modes[1]
+        # Get the values of mode_1 and mode_2 at each step
+        mode_1_values = [m[mode_1] for m in magnitude_modes]
+        mode_2_values = [m[mode_2] for m in magnitude_modes]
+        # Plot
+        plt.clf()
+        fig, ax = plt.subplots()
+        cmap = plt.cm.get_cmap('rainbow')
+        norm = plt.Normalize(vmin=0, vmax=len(mode_1_values))
+        colors = [cmap(norm(i)) for i in range(len(mode_1_values))]
+        ax.scatter(mode_1_values, mode_2_values, marker="o", s=10, c=colors)
+        ax.set_xlabel(f"Mode {mode_1+1}")
+        ax.set_ylabel(f"Mode {mode_2+1}")
+        fig.savefig(
+            f'plots/magnitude_modes_SGLD_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+        )
+        plt.clf()
+        fig, ax = plt.subplots()
+        for i, m in enumerate(magnitude_modes):
+            ax.plot(m[:p//2+1], label=f"Step {mag_every*i}", marker="o", c=colors[i], markersize=6)
+        ax.set_xlabel("Mode")
+        ax.set_ylabel("Magnitude")
+        ax.legend()
+        # title
+        plt.title("Fourier mode magnitude vs. SGLD sampling checkpoint")
+        fig.savefig(
+            f'plots/magnitude_modes_SGLD_all_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+        )
     return model, lambda_hat
 
-def point_sample_pca():
+def point_sample_pca(colormapping_loss=True):
     # get point samples from /point_samples and plot pca in weight space with color corresponding to full loss (use rainbow colormap)
     files = glob("point_samples/*.json")
     # sort filenames by sgld step
@@ -196,6 +242,11 @@ def point_sample_pca():
     print("mean", pca.mean_)
     print("noise variance", pca.noise_variance_)
     print("losses", losses)
+
+    # Plot 200 equally spaced points
+    points_pca = points_pca[::len(points_pca)//200]
+    losses = losses[::len(losses)//200]
+
     # Plot PCA
     plt.clf()
     fig, ax = plt.subplots()
@@ -204,16 +255,22 @@ def point_sample_pca():
     losses = [float(l) for l in losses]
     
     # map color to loss
-    cmap = plt.cm.get_cmap('rainbow')
-    norm = plt.Normalize(vmin=min(losses), vmax=max(losses))
-    colors = [cmap(norm(l)) for l in losses]
+    if colormapping_loss:
+        cmap = plt.cm.get_cmap('rainbow')
+        norm = plt.Normalize(vmin=min(losses), vmax=max(losses))
+        colors = [cmap(norm(l)) for l in losses]
+    else:
+        cmap = plt.cm.get_cmap('rainbow')
+        norm = plt.Normalize(vmin=0, vmax=len(losses))
+        colors = [cmap(norm(i)) for i in range(len(losses))]
 
-    # Plot points
-    ax.scatter(points_pca[:, 0], points_pca[:, 1], c=colors)
+
+    # Plot points with small marker size
+    ax.scatter(points_pca[:, 0], points_pca[:, 1], c=colors, s=6)
 
     # Label points with loss values
-    for i, txt in enumerate([f"{i}, {round(l, 2)}" for i, l in enumerate(losses)]):
-        ax.annotate(txt, (points_pca[i][0], points_pca[i][1]), fontsize=7)
+    # for i, txt in enumerate([f"{i}, {round(l, 2)}" for i, l in enumerate(losses)]):
+    #     ax.annotate(txt, (points_pca[i][0], points_pca[i][1]), fontsize=7)
 
     # Set x and y labels
     ax.set_xlabel("PC1")
@@ -607,13 +664,14 @@ def plot_lambda_per_frac(sgld_params, frac_sweep_dir, resample=False):
 
 if __name__ == "__main__":
     sgld_params = SGLDParams(
-        gamma=50,
-        epsilon=0.0001,
-        n_steps=5000,
+        gamma=1,
+        epsilon=0.001,
+        n_steps=10000,
         m=64,
         restrict_to_orth_grad=True,
         n_multiplier=1,
-        num_point_samples=50,
-        get_updated_model_parameters=lambda model: model.embedding.parameters(),
+        num_point_samples=200,
+        n_magnitude_samples=15,
+        weight_decay=0.0002,
     )
     plot_lambda_per_frac(sgld_params, "exp_params/test", resample=True)

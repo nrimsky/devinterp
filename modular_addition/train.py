@@ -254,7 +254,7 @@ if __name__ == "__main__":
         use_random_dataset=False,
         freeze_middle=False,
         n_batches=10000,
-        n_save_model_checkpoints=25,
+        n_save_model_checkpoints=0,
         lr=0.002,
         magnitude=False,
         ablation_fourier=False,
@@ -263,10 +263,10 @@ if __name__ == "__main__":
         num_no_weight_decay_steps=0,
         run_id=0,
         activation="gelu",
-        p=23,
+        p=53,
     )
     params.hidden_size = 144
     params.embed_dim = 36
     params.use_random_dataset = False
-    frac_sweep_exp([0.55], params, "slow")
+    frac_sweep_exp([0.8], params, "slow")
     

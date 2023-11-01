@@ -7,7 +7,7 @@ from dataset import make_dataset, train_test_split
 from model import MLP
 from matplotlib import pyplot as plt
 from datetime import datetime
-from glob import glob
+from typing import Callable, List
 
 def get_weight_norm(model):
     return sum((p ** 2).sum() for p in model.parameters() if p.requires_grad)
@@ -62,27 +62,48 @@ def hessian_eig(
     )
     return eigenvalues[::-1]
 
-def hessian_eig_sweep(directory, values, xaxis):
-    files = glob(f"{directory}/*.json")
-    eigs = []
-    for v in values:
-        eigs.append([])
-        for f in files:
-            params = ExperimentParams.load_from_file(f)
-            if getattr(params, xaxis) == v:
-                eigs[-1].extend(hessian_eig(f, param_extract_fn=lambda x: x.parameters()))
 
+def hessian_eig_sweep(filenames, labels, ntop):
+    # Get the rainbow colormap
+    cmap = plt.cm.get_cmap('rainbow')
+    n_files = len(filenames)
+    for i, f in enumerate(filenames):
+        eigenvalues = hessian_eig(f, n_top_vectors=ntop) 
+        eigenvalues = sorted([float(e) for e in eigenvalues], reverse=True)
+        # Get a color from the rainbow colormap based on the file's index
+        color = cmap(i / (n_files - 1))
+        # plot with no connecting lines
+        plt.plot(eigenvalues, "o", color=color, label=labels[i], markersize=2, linestyle="None")
+    plt.legend()
+    plt.xlabel("Rank")
+    plt.ylabel("Eigenvalue")
+    plt.savefig(f"plots/eig/eigenvalues_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
 
 
 if __name__ == "__main__":
-    filename = "exp_params/EXPemb_24_mid_64_RANDOM/15_1.json"
-    eigs = hessian_eig(filename, param_extract_fn=lambda x: x.parameters())
-    for i, e in enumerate(eigs):
-        print(f"#{i}: {e}")
-    params = ExperimentParams.load_from_file(filename)
-    plt.plot(eigs, "o", markersize=2)
-    plt.xlabel("Eigenvalue index")
-    plt.ylabel("Eigenvalue")
-    plt.savefig(f"plots/eig/eigenvalues_{params.get_suffix()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+    files = [
+        "exp_params/frac_sweep/0.1_0.json",
+        "exp_params/frac_sweep/0.15_0.json",
+        "exp_params/frac_sweep/0.2_0.json",
+        "exp_params/frac_sweep/0.25_0.json",
+        "exp_params/frac_sweep/0.3_0.json",
+        "exp_params/frac_sweep/0.35_0.json",
+        "exp_params/frac_sweep/0.4_0.json",
+        "exp_params/frac_sweep/0.45_0.json",
+        "exp_params/frac_sweep/0.5_0.json",
+        "exp_params/frac_sweep/0.55_0.json",
+        "exp_params/frac_sweep/0.6_0.json",
+        "exp_params/frac_sweep/0.65_0.json",
+        "exp_params/frac_sweep/0.7_0.json",
+        "exp_params/frac_sweep/0.75_0.json",
+        "exp_params/frac_sweep/0.8_0.json",
+        "exp_params/frac_sweep/0.85_0.json",
+        "exp_params/frac_sweep/0.9_0.json",
+        "exp_params/frac_sweep/0.95_0.json",
+    ]
+    labels = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 
+         0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 
+         0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+    hessian_eig_sweep(files, labels, 100)
 
 
