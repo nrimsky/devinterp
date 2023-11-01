@@ -7,6 +7,7 @@ from dataset import make_dataset, train_test_split
 from model import MLP
 from matplotlib import pyplot as plt
 from datetime import datetime
+from glob import glob
 
 def get_weight_norm(model):
     return sum((p ** 2).sum() for p in model.parameters() if p.requires_grad)
@@ -61,9 +62,20 @@ def hessian_eig(
     )
     return eigenvalues[::-1]
 
+def hessian_eig_sweep(directory, values, xaxis):
+    files = glob(f"{directory}/*.json")
+    eigs = []
+    for v in values:
+        eigs.append([])
+        for f in files:
+            params = ExperimentParams.load_from_file(f)
+            if getattr(params, xaxis) == v:
+                eigs[-1].extend(hessian_eig(f, param_extract_fn=lambda x: x.parameters()))
+
+
 
 if __name__ == "__main__":
-    filename = "exp_params/EXPemb_24_mid_64_RANDOM/29_1.json"
+    filename = "exp_params/EXPemb_24_mid_64_RANDOM/15_1.json"
     eigs = hessian_eig(filename, param_extract_fn=lambda x: x.parameters())
     for i, e in enumerate(eigs):
         print(f"#{i}: {e}")

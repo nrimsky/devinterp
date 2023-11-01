@@ -10,11 +10,14 @@ from matplotlib import pyplot as plt
 from datetime import datetime
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Optional
 import json
 from glob import glob
 from model_viz import viz_weights_modes
 from movie import run_movie_cmd
+import os
+from matplotlib import pyplot as plt
+from sklearn.decomposition import PCA
 
 @dataclass
 class SGLDParams:
@@ -26,6 +29,7 @@ class SGLDParams:
     get_updated_model_parameters: Callable = lambda model: model.parameters()
     n_multiplier: float = 1
     movie: bool = False
+    num_point_samples: Optional[int] = None
 
 
 def cross_entropy_loss(logits, y_s):
@@ -38,6 +42,12 @@ def cross_entropy_loss(logits, y_s):
     preds = t.nn.functional.softmax(logits, dim=1)
     return -1 * t.mean(t.log(preds[t.arange(len(preds)), y_s] + 1e-7))
 
+def get_full_train_loss(model, dataset, device):
+    X_1 = t.stack([dataset[b][0][0] for b in range(len(dataset))]).to(device)
+    X_2 = t.stack([dataset[b][0][1] for b in range(len(dataset))]).to(device)
+    Y = t.stack([dataset[b][1] for b in range(len(dataset))]).to(device)
+    out = model(X_1, X_2)
+    return cross_entropy_loss(out, Y)
 
 def sgld(model, sgld_params, dataset, device):
     """
@@ -63,13 +73,10 @@ def sgld(model, sgld_params, dataset, device):
 
     submodule_param_mask = get_submodule_param_mask(model, sgld_params.get_updated_model_parameters).to(device)
 
-    X_1 = t.stack([dataset[b][0][0] for b in range(len(dataset))]).to(device)
-    X_2 = t.stack([dataset[b][0][1] for b in range(len(dataset))]).to(device)
-    Y = t.stack([dataset[b][1] for b in range(len(dataset))]).to(device)
     w_0 = t.nn.utils.parameters_to_vector(model.parameters()).detach().clone().to(device)
 
-    out = model(X_1, X_2)
-    cross_entropy_loss_value = cross_entropy_loss(out, Y)
+    # Compute cross entropy loss
+    cross_entropy_loss_value = get_full_train_loss(model, dataset, device)
 
     # Compute gradients using torch.autograd.grad
     gradients = t.autograd.grad(cross_entropy_loss_value, model.parameters(), create_graph=True)
@@ -83,7 +90,15 @@ def sgld(model, sgld_params, dataset, device):
     full_losses = []
 
     frame_every = sgld_params.n_steps // 50
-
+    sample_every = None
+    if sgld_params.num_point_samples is not None:
+        sample_every = sgld_params.n_steps // sgld_params.num_point_samples
+        # make directory for point samples
+        os.makedirs("point_samples", exist_ok=True)
+        # empty directory
+        files = glob("point_samples/*.json")
+        for f in files:
+            os.remove(f)
     step = 0
     for sgld_step in tqdm(range(sgld_params.n_steps)):
         batch_idx = random.choices(idx, k=sgld_params.m)
@@ -120,6 +135,20 @@ def sgld(model, sgld_params, dataset, device):
                 f"frames/embeddings_movie_{step:06}.png",
             )
             step += 1
+
+        if sample_every is not None:
+            if sgld_step % sample_every == 0:
+                with t.no_grad():
+                    full_loss_value = get_full_train_loss(model, dataset, device).item()
+                    data = {
+                        "full_loss": float(full_loss_value),
+                        "new_params": list([float(x) for x in new_params.cpu().numpy().flatten()]),
+                    }
+                    with open(f"point_samples/point_sample_{sgld_step:06}.json", "w") as f:
+                        json.dump(data, f)
+
+
+
     wbic = sgld_params.n_multiplier * n * sum(array_loss) / len(array_loss)
     lambda_hat = (wbic - n_ln_wstar) / log(sgld_params.n_multiplier * n)
     print(f"lambda_hat: {lambda_hat}")
@@ -132,7 +161,67 @@ def sgld(model, sgld_params, dataset, device):
     print(f"full_losses: {full_losses[::len(full_losses)//20]}")
     if sgld_params.movie:
         run_movie_cmd("sgld")
+    if sgld_params.num_point_samples is not None:
+        point_sample_pca()
     return model, lambda_hat
+
+def point_sample_pca():
+    # get point samples from /point_samples and plot pca in weight space with color corresponding to full loss (use rainbow colormap)
+    files = glob("point_samples/*.json")
+    # sort filenames by sgld step
+    files = sorted(files, key=lambda x: int(x.split("_")[-1].split(".")[0]))
+    points = []
+    losses = []
+    for f in files:
+        with open(f, "r") as f:
+            data = json.load(f)
+            points.append(data["new_params"])
+            losses.append(data["full_loss"])
+    points = t.tensor(points)
+    losses = t.tensor(losses)
+    # normalize points
+    points = (points - points.mean(dim=0)) / points.std(dim=0)
+    # fillnan with 0
+    points[points != points] = 0
+
+    print("points", points.shape)
+    print("losses", losses.shape)
+    pca = PCA(n_components=2)
+    pca.fit(points)
+    points_pca = pca.transform(points)
+    print("points_pca", points_pca.shape)
+    print("explained variance", pca.explained_variance_ratio_)
+    print("singular values", pca.singular_values_)
+    print("components", pca.components_)
+    print("mean", pca.mean_)
+    print("noise variance", pca.noise_variance_)
+    print("losses", losses)
+    # Plot PCA
+    plt.clf()
+    fig, ax = plt.subplots()
+
+    # Round losses to 2 decimal places
+    losses = [float(l) for l in losses]
+    
+    # map color to loss
+    cmap = plt.cm.get_cmap('rainbow')
+    norm = plt.Normalize(vmin=min(losses), vmax=max(losses))
+    colors = [cmap(norm(l)) for l in losses]
+
+    # Plot points
+    ax.scatter(points_pca[:, 0], points_pca[:, 1], c=colors)
+
+    # Label points with loss values
+    for i, txt in enumerate([f"{i}, {round(l, 2)}" for i, l in enumerate(losses)]):
+        ax.annotate(txt, (points_pca[i][0], points_pca[i][1]), fontsize=7)
+
+    # Set x and y labels
+    ax.set_xlabel("PC1")
+    ax.set_ylabel("PC2")
+
+    fig.savefig(
+        f'plots/point_samples_pca_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+    )
 
 
 def hyperparameter_search(
@@ -352,6 +441,7 @@ def plot_lambda_per_checkpoint(param_file, sgld_params, checkpoints=None):
 
 def plot_lambda_per_checkpoint_multi_run(sgld_params, sweep_dir):
     files = glob(f"{sweep_dir}/*.json")
+
     results = defaultdict(dict)
     for f in files:
         exp_params = ExperimentParams.load_from_file(f)
@@ -523,6 +613,7 @@ if __name__ == "__main__":
         m=64,
         restrict_to_orth_grad=True,
         n_multiplier=1,
-        # movie=True
+        num_point_samples=50,
+        get_updated_model_parameters=lambda model: model.embedding.parameters(),
     )
-    plot_lambda_per_checkpoint("exp_params/slow/0.55_0.json", sgld_params)
+    plot_lambda_per_frac(sgld_params, "exp_params/test", resample=True)
