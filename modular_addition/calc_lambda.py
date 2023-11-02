@@ -1,7 +1,7 @@
 import torch as t
 from tqdm import tqdm
 import random
-from helpers import eval_model, get_submodule_param_mask
+from helpers import get_submodule_param_mask
 from math import log, sqrt
 from train import ExperimentParams
 from model import MLP
@@ -80,7 +80,7 @@ def sgld(model, sgld_params, dataset, device):
     model = model.to(device)
     beta = 1 / log(n * sgld_params.n_multiplier)
 
-    init_loss = eval_model(model, dataset, device)
+    init_loss = get_full_train_loss(model, dataset, device, logit_scaling=sgld_params.logit_scaling)
     n_ln_wstar = n * init_loss * sgld_params.n_multiplier
     idx = list(range(len(dataset)))
     optimizer = optimizer = t.optim.SGD(
@@ -525,8 +525,8 @@ def get_lambda(params, sgld_params, checkpoint_no=None):
     train_data, test_data = train_test_split(
         dataset, params.train_frac, params.random_seed
     )
-    test_loss = eval_model(model, test_data, params.device)
-    train_loss = eval_model(model, train_data, params.device)
+    test_loss = get_full_train_loss(model, test_data, params.device)
+    train_loss = get_full_train_loss(model, train_data, params.device)
     _, lambda_hat = sgld(model, sgld_params, train_data, params.device)
     return lambda_hat, test_loss, train_loss
 
