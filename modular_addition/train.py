@@ -200,7 +200,9 @@ def count_params(model):
 
 def run_exp(params):
     params.save_to_file(f"models/params_{params.get_suffix()}.json")
+    print(f"models/params_{params.get_suffix()}.json")
     model = MLP(params)
+    print(f"Number of parameters: {count_params(model)}")
     if params.use_random_dataset:
         dataset = make_random_dataset(params.p, params.random_seed)
     else:
@@ -211,7 +213,8 @@ def run_exp(params):
     model, mode_loss_history, magnitude_history = train(
         model=model, train_dataset=train_data, test_dataset=test_data, params=params
     )
-    t.save(model.state_dict(), f"models/model_{params.get_suffix()}.pt")
+    fname = f"models/model_{params.get_suffix()}.pt"
+    t.save(model.state_dict(), fname)
     if params.do_viz_weights_modes:
         viz_weights_modes(
             model.embedding.weight.detach().cpu(),
@@ -231,11 +234,13 @@ def run_exp(params):
     if params.movie:
         run_movie_cmd(params.get_suffix())
 
+
 def p_sweep_exp(p_values, params, psweep):
     for p in p_values:
         params.p = p
         params.save_to_file(f"exp_params/{psweep}/{p}_{params.run_id}.json")
         run_exp(params)
+
 
 def frac_sweep_exp(train_fracs, params, psweep):
     for frac in train_fracs:
@@ -243,6 +248,8 @@ def frac_sweep_exp(train_fracs, params, psweep):
         params.save_to_file(f"exp_params/{psweep}/{frac}_{params.run_id}.json")
         run_exp(params)
 
+def count_params(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 if __name__ == "__main__":
     params = ExperimentParams(
@@ -253,20 +260,21 @@ if __name__ == "__main__":
         scale_embed=1.0,
         use_random_dataset=False,
         freeze_middle=False,
-        n_batches=10000,
+        n_batches=20000,
         n_save_model_checkpoints=0,
-        lr=0.002,
+        lr=0.01,
         magnitude=False,
         ablation_fourier=False,
-        do_viz_weights_modes=True,
+        do_viz_weights_modes=False,
         batch_size=64,
         num_no_weight_decay_steps=0,
         run_id=0,
         activation="gelu",
-        p=53,
+        hidden_size=64,
+        embed_dim=16,
+        train_frac=0.9,
+        weight_decay=0.0002,
     )
-    params.hidden_size = 144
-    params.embed_dim = 36
-    params.use_random_dataset = False
-    frac_sweep_exp([0.8], params, "slow")
-    
+    for run in range(5):
+        params.run_id = run
+        p_sweep_exp([13, 23, 31, 53], params, "temp_exp")
