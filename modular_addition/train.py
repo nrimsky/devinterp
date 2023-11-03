@@ -248,8 +248,10 @@ def frac_sweep_exp(train_fracs, params, psweep):
         params.save_to_file(f"exp_params/{psweep}/{frac}_{params.run_id}.json")
         run_exp(params)
 
+
 def count_params(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 
 if __name__ == "__main__":
     params = ExperimentParams(
@@ -260,21 +262,19 @@ if __name__ == "__main__":
         scale_embed=1.0,
         use_random_dataset=False,
         freeze_middle=False,
-        n_batches=20000,
+        n_batches=15000,
         n_save_model_checkpoints=0,
-        lr=0.01,
+        lr=0.005,
         magnitude=False,
         ablation_fourier=False,
         do_viz_weights_modes=False,
-        batch_size=64,
+        batch_size=128,
         num_no_weight_decay_steps=0,
         run_id=0,
         activation="gelu",
-        hidden_size=64,
-        embed_dim=16,
-        train_frac=0.9,
-        weight_decay=0.0002,
+        hidden_size=48,
+        embed_dim=6,
+        # weight_decay=0.0002,
+        p=71,
     )
-    for run in range(5):
-        params.run_id = run
-        p_sweep_exp([13, 23, 31, 53], params, "temp_exp")
+    frac_sweep_exp([n / 10 for n in range(1, 9)], params, "frac_sweep_latest_2")

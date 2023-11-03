@@ -60,6 +60,7 @@ def cross_entropy_loss(logits, y_s, logit_scaling=1):
 
 
 def get_full_train_loss(model, dataset, device, logit_scaling=1):
+    model = model.to(device)
     X_1 = t.stack([dataset[b][0][0] for b in range(len(dataset))]).to(device)
     X_2 = t.stack([dataset[b][0][1] for b in range(len(dataset))]).to(device)
     Y = t.stack([dataset[b][1] for b in range(len(dataset))]).to(device)
@@ -80,7 +81,9 @@ def sgld(model, sgld_params, dataset, device):
     model = model.to(device)
     beta = 1 / log(n * sgld_params.n_multiplier)
 
-    init_loss = get_full_train_loss(model, dataset, device, logit_scaling=sgld_params.logit_scaling)
+    init_loss = get_full_train_loss(
+        model, dataset, device, logit_scaling=sgld_params.logit_scaling
+    )
     n_ln_wstar = n * init_loss * sgld_params.n_multiplier
     idx = list(range(len(dataset)))
     optimizer = optimizer = t.optim.SGD(
@@ -563,9 +566,6 @@ def plot_lambda_test_train_loss(
     ax1.set_ylabel("$\hat{\lambda}$")
     ax1.tick_params("y", colors="g")
     ax1.legend(loc="upper left")
-    # Y axis ticks every 25 up to the max
-    ax1.set_yticks(range(0, int(max(lambda_values)) + 1, 25))
-    ax1.grid(True)
 
     # Create a second y-axis for the losses
     ax2 = ax1.twinx()
@@ -854,7 +854,11 @@ def slope_vs_n_mult(sgld_params, exp_dir, n_mults):
             p = exp_params.p
             run_id = exp_params.run_id
             lambda_hat, test_loss, train_loss = get_lambda(exp_params, sgld_params)
-            results[p][run_id] = (lambda_hat.item(), test_loss.item(), train_loss.item())
+            results[p][run_id] = (
+                lambda_hat.item(),
+                test_loss.item(),
+                train_loss.item(),
+            )
             exp_params.lambda_hat = lambda_hat.item()
             exp_params.test_loss = test_loss.item()
             exp_params.train_loss = train_loss.item()
@@ -888,24 +892,18 @@ def slope_vs_n_mult(sgld_params, exp_dir, n_mults):
     )
     plt.close()
 
+
 if __name__ == "__main__":
     sgld_params = SGLDParams(
         gamma=5,
         epsilon=0.001,
-        n_steps=3000,
+        n_steps=1000,
         m=64,
         restrict_to_orth_grad=True,
-        weight_decay=0.0002,
         logit_scaling=1,
+        # weight_decay = 0.0002,
     )
-    # exp_dir = "exp_params/temp_exp"
-    # n_mults=[10**(i/3) for i in range(-6, 7)]
-    # print(n_mults)
-    # slope_vs_n_mult(sgld_params, exp_dir, n_mults=n_mults)
-
-    sgld_params.n_multiplier = 0.1
-    plot_lambda_per_p(sgld_params, "exp_params/temp_exp", resample=True, append_to_title="n_mult_0.1")
     sgld_params.n_multiplier = 1
-    plot_lambda_per_p(sgld_params, "exp_params/temp_exp", resample=True, append_to_title="n_mult_1")
-    sgld_params.n_multiplier = 3
-    plot_lambda_per_p(sgld_params, "exp_params/temp_exp", resample=True, append_to_title="n_mult_3")
+    plot_lambda_per_frac(
+        sgld_params=sgld_params, frac_sweep_dir="exp_params/frac_sweep_latest_2", resample=False
+    )

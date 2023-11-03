@@ -88,44 +88,47 @@ def hessian_eig_sweep(filenames, labels, ntop):
 
 
 if __name__ == "__main__":
-    files = [
-        "exp_params/frac_sweep/0.1_0.json",
-        "exp_params/frac_sweep/0.15_0.json",
-        "exp_params/frac_sweep/0.2_0.json",
-        "exp_params/frac_sweep/0.25_0.json",
-        "exp_params/frac_sweep/0.3_0.json",
-        "exp_params/frac_sweep/0.35_0.json",
-        "exp_params/frac_sweep/0.4_0.json",
-        "exp_params/frac_sweep/0.45_0.json",
-        "exp_params/frac_sweep/0.5_0.json",
-        "exp_params/frac_sweep/0.55_0.json",
-        "exp_params/frac_sweep/0.6_0.json",
-        "exp_params/frac_sweep/0.65_0.json",
-        "exp_params/frac_sweep/0.7_0.json",
-        "exp_params/frac_sweep/0.75_0.json",
-        "exp_params/frac_sweep/0.8_0.json",
-        "exp_params/frac_sweep/0.85_0.json",
-        "exp_params/frac_sweep/0.9_0.json",
-        "exp_params/frac_sweep/0.95_0.json",
-    ]
-    labels = [
-        0.1,
-        0.15,
-        0.2,
-        0.25,
-        0.3,
-        0.35,
-        0.4,
-        0.45,
-        0.5,
-        0.55,
-        0.6,
-        0.65,
-        0.7,
-        0.75,
-        0.8,
-        0.85,
-        0.9,
-        0.95,
-    ]
-    hessian_eig_sweep(files, labels, 500)
+    es = hessian_eig("exp_params/frac_sweep/0.9_0.json", n_top_vectors=1000)
+    for e in es:
+        print(e)
+    # files = [
+    #     "exp_params/frac_sweep/0.1_0.json",
+    #     "exp_params/frac_sweep/0.15_0.json",
+    #     "exp_params/frac_sweep/0.2_0.json",
+    #     "exp_params/frac_sweep/0.25_0.json",
+    #     "exp_params/frac_sweep/0.3_0.json",
+    #     "exp_params/frac_sweep/0.35_0.json",
+    #     "exp_params/frac_sweep/0.4_0.json",
+    #     "exp_params/frac_sweep/0.45_0.json",
+    #     "exp_params/frac_sweep/0.5_0.json",
+    #     "exp_params/frac_sweep/0.55_0.json",
+    #     "exp_params/frac_sweep/0.6_0.json",
+    #     "exp_params/frac_sweep/0.65_0.json",
+    #     "exp_params/frac_sweep/0.7_0.json",
+    #     "exp_params/frac_sweep/0.75_0.json",
+    #     "exp_params/frac_sweep/0.8_0.json",
+    #     "exp_params/frac_sweep/0.85_0.json",
+    #     "exp_params/frac_sweep/0.9_0.json",
+    #     "exp_params/frac_sweep/0.95_0.json",
+    # ]
+    # labels = [
+    #     0.1,
+    #     0.15,
+    #     0.2,
+    #     0.25,
+    #     0.3,
+    #     0.35,
+    #     0.4,
+    #     0.45,
+    #     0.5,
+    #     0.55,
+    #     0.6,
+    #     0.65,
+    #     0.7,
+    #     0.75,
+    #     0.8,
+    #     0.85,
+    #     0.9,
+    #     0.95,
+    # ]
+    # hessian_eig_sweep(files, labels, 500)
