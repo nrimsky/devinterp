@@ -63,9 +63,7 @@ def sgld(model, sgld_params, dataset, device):
         Y = t.stack([dataset[b][1] for b in batch_idx]).to(device)
         optimizer.zero_grad()
         out = model(X_1, X_2)
-        cross_entropy_loss_value = cross_entropy_loss(
-            out, Y, logit_scaling=sgld_params.logit_scaling
-        )
+        cross_entropy_loss_value = cross_entropy_loss(out, Y)
         array_loss.append(cross_entropy_loss_value.item())
         w = t.nn.utils.parameters_to_vector(model.parameters())
         elasticity_loss_term = (sgld_params.gamma / 2) * t.sum(((w_0 - w) ** 2))
