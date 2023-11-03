@@ -71,9 +71,7 @@ def sgld(model, sgld_params, dataset, device):
         log_likelihood_loss_term = (
             (cross_entropy_loss_value + reg_term) * n * beta * sgld_params.n_multiplier
         )
-        full_loss = (
-            sgld_params.epsilon / 2
-        ) * elasticity_loss_term + log_likelihood_loss_term
+        full_loss = (sgld_params.epsilon / 2) * (elasticity_loss_term + log_likelihood_loss_term)
         full_loss.backward()
         optimizer.step()
         with t.no_grad():
