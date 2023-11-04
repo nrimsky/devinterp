@@ -3,6 +3,7 @@ import random
 from math import log, sqrt
 from dataclasses import dataclass
 from tqdm import tqdm
+from typing import Callable
 
 @dataclass
 class SGLDParams:
@@ -11,33 +12,20 @@ class SGLDParams:
     n_steps: int = 10000
     batch_size: int = 512
     n_multiplier: float = 1
-    use_mse: bool = False
+    loss_fn: Callable = None
 
 
-def cross_entropy_loss(logits, y_s):
-    preds = t.nn.functional.softmax(logits, dim=1)
-    return -1 * t.mean(t.log(preds[t.arange(len(preds)), y_s] + 1e-7))
+
+def get_loss(model, loss_fn, inputs=None, labels=None):
+    if inputs is None:
+        return loss_fn(model())
+    return loss_fn(model(inputs), labels)
 
 
-def mse_loss(logits, y_s):
-    return t.mean((logits - y_s) ** 2)
-
-
-def get_full_train_loss(model, dataset, device, use_mse=False):
-    X = t.stack([dataset[b][0] for b in range(len(dataset))]).to(device)
-    Y = t.stack([dataset[b][1] for b in range(len(dataset))]).to(device)
-    out = model(X)
-    if use_mse:
-        return mse_loss(out, Y)
-    return cross_entropy_loss(out, Y)
-
-
-def sgld(model, sgld_params, dataset, device):
-    loss_fn = mse_loss if sgld_params.use_mse else cross_entropy_loss
-    model = model.to(device)
-    n = len(dataset)
+def sgld(model, sgld_params, inputs=None, labels=None):
+    n = 1 if inputs is None else len(inputs)
     beta = 1 / log(n * sgld_params.n_multiplier)
-    init_loss = get_full_train_loss(model, dataset, device, sgld_params.use_mse)
+    init_loss = get_loss(model, sgld_params.loss_fn, inputs, labels)
     n_ln_wstar = n * init_loss * sgld_params.n_multiplier
     optimizer = optimizer = t.optim.SGD(
         model.parameters(),
@@ -45,18 +33,20 @@ def sgld(model, sgld_params, dataset, device):
         lr=1,
     )
     w_0 = (
-        t.nn.utils.parameters_to_vector(model.parameters()).detach().clone().to(device)
+        t.nn.utils.parameters_to_vector(model.parameters()).detach().clone()
     )
     array_loss = []
-    idx = list(range(len(dataset)))
-
+    idx = list(range(n))
     for _ in tqdm(range(sgld_params.n_steps)):
-        batch_idx = random.choices(idx, k=sgld_params.batch_size)
-        X = t.stack([dataset[b][0] for b in batch_idx]).to(device)
-        Y = t.stack([dataset[b][1] for b in batch_idx]).to(device)
+        if inputs is not None:
+            batch_idx = random.choices(idx, k=sgld_params.batch_size)
+            X = t.stack([inputs[b] for b in batch_idx])
+            Y = t.stack([labels[b] for b in batch_idx])
+        else:
+            X = inputs
+            Y = labels
         optimizer.zero_grad()
-        out = model(X)
-        loss_value = loss_fn(out, Y)
+        loss_value = get_loss(model, sgld_params.loss_fn, X, Y)
         array_loss.append(loss_value.item())
         w = t.nn.utils.parameters_to_vector(model.parameters())
         elasticity_loss_term = (sgld_params.gamma / 2) * t.sum(((w_0 - w) ** 2))
@@ -66,7 +56,7 @@ def sgld(model, sgld_params, dataset, device):
         optimizer.step()
         with t.no_grad():
             # Add noise to the parameters
-            eta = t.randn_like(w, device=device) * sqrt(sgld_params.epsilon)
+            eta = t.randn_like(w) * sqrt(sgld_params.epsilon)
             new_params = t.nn.utils.parameters_to_vector(model.parameters()) + eta
             t.nn.utils.vector_to_parameters(new_params, model.parameters())
     wbic = sgld_params.n_multiplier * n * sum(array_loss) / len(array_loss)
