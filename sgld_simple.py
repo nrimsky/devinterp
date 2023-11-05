@@ -59,7 +59,8 @@ def sgld(model, sgld_params, inputs=None, labels=None):
             eta = t.randn_like(w) * sqrt(sgld_params.epsilon)
             new_params = t.nn.utils.parameters_to_vector(model.parameters()) + eta
             t.nn.utils.vector_to_parameters(new_params, model.parameters())
-    wbic = sgld_params.n_multiplier * n * sum(array_loss) / len(array_loss)
+            start_pos = len(array_loss) // 4
+    wbic = sgld_params.n_multiplier * n * sum(array_loss[start_pos:]) / (len(array_loss)-start_pos)
     lambda_hat = (wbic - n_ln_wstar) / log(sgld_params.n_multiplier * n)
     print(array_loss[::len(array_loss) // 20])
     return lambda_hat
