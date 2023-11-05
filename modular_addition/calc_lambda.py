@@ -217,7 +217,7 @@ def sgld(model, sgld_params, dataset, device):
                     modes = modes.tolist()
                     modes = modes[1 : p // 2 + 1]
                     magnitude_modes.append(modes)
-    wbic = sgld_params.n_multiplier * n * sum(array_loss) / len(array_loss)
+    wbic = sgld_params.n_multiplier * n * sum(array_loss[len(array_loss)//4:]) / (len(array_loss) - len(array_loss)//4)
     lambda_hat = (wbic - n_ln_wstar) / log(sgld_params.n_multiplier * n)
     print(f"lambda_hat: {lambda_hat}")
     print(f"wbic: {wbic}")
@@ -895,15 +895,17 @@ def slope_vs_n_mult(sgld_params, exp_dir, n_mults):
 
 if __name__ == "__main__":
     sgld_params = SGLDParams(
-        gamma=5,
-        epsilon=0.001,
-        n_steps=1000,
+        gamma=10,
+        epsilon=0.0003,
+        n_steps=2000,
         m=64,
         restrict_to_orth_grad=True,
         logit_scaling=1,
-        # weight_decay = 0.0002,
+        n_multiplier=0.05,
     )
-    sgld_params.n_multiplier = 1
-    plot_lambda_per_frac(
-        sgld_params=sgld_params, frac_sweep_dir="exp_params/frac_sweep_latest_2", resample=False
+    plot_lambda_per_p_different_exps(
+        ["exp_params/emb_16_mid_64_2", "exp_params/emb_16_mid_64_2_RANDOM"],
+        ["modular addition", "random"],
+        sgld_params,
+        resample=True,
     )
