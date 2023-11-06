@@ -51,29 +51,32 @@ def experiment():
     full_results = []
     for noise in noises:
         results = []
-        for n_multiplier in n_multipliers:
-            n = 1000
-            n_epochs = 3000
-            hidden_dim = 20
-            lr = 0.02
-            dataset, labels = get_dataset(n, noise)
-            act_fn = t.nn.ReLU()
-            loss_fn = t.nn.MSELoss()
-            model = train(act_fn, hidden_dim, n_epochs, lr, dataset, labels)
-            sgld_params = SGLDParams(
-                gamma=10,
-                epsilon=0.0001,
-                n_steps=5000,
-                batch_size=n,
-                n_multiplier=n_multiplier,
-                loss_fn=loss_fn,
-            )
-            lambda_hat = sgld(model, sgld_params, dataset, labels)
-            print(lambda_hat.item(), n_multiplier, noise)
-            results.append(lambda_hat.item())
-        full_results.append(results)
+        for sample in range(5):
+            sample_results = []
+            for n_multiplier in n_multipliers:
+                n = 1000
+                n_epochs = 3000
+                hidden_dim = 20
+                lr = 0.02
+                dataset, labels = get_dataset(n, noise)
+                act_fn = lambda x: x**2
+                loss_fn = t.nn.MSELoss()
+                model = train(act_fn, hidden_dim, n_epochs, lr, dataset, labels)
+                sgld_params = SGLDParams(
+                    gamma=5,
+                    epsilon=0.0001,
+                    n_steps=5000,
+                    batch_size=n,
+                    n_multiplier=n_multiplier,
+                    loss_fn=loss_fn,
+                )
+                lambda_hat = sgld(model, sgld_params, dataset, labels)
+                print(lambda_hat.item(), n_multiplier, noise)
+                sample_results.append(lambda_hat.item())
+            results.append(sample_results)
+        full_results.append([sum(i) / len(i) for i in zip(*results)])
 
-    with open("results_relu.txt", "w") as f:
+    with open("results_quad.txt", "w") as f:
         for noise, result in zip(noises, full_results):
             f.write(f"{noise} {result}\n")
         # write the multipliers
@@ -85,7 +88,7 @@ def experiment():
     # x ticks are n_multipliers
     plt.xticks(list(range(len(n_multipliers))), [round(i, 2) for i in n_multipliers])
     plt.legend()
-    plt.savefig("results_relu.png")
+    plt.savefig("results_quad_5_samples.png")
 
         
 if __name__ == "__main__":
