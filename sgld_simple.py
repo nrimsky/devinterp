@@ -36,7 +36,7 @@ def sgld(model, sgld_params, inputs=None, labels=None):
         inv_temperature = (effective_n / log(effective_n)) / sgld_params.temp_multiplier
 
     init_loss = get_loss(model, sgld_params.loss_fn, inputs, labels)
-    optimizer = optimizer = t.optim.SGD(
+    optimizer = t.optim.SGD(
         model.parameters(),
         weight_decay=0,
         lr=1,

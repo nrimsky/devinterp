@@ -94,7 +94,7 @@ def sgld(model, sgld_params, dataset, device):
     )
 
     idx = list(range(len(dataset)))
-    optimizer = optimizer = t.optim.SGD(
+    optimizer = t.optim.SGD(
         sgld_params.get_updated_model_parameters(model),
         weight_decay=0,
         lr=1,
