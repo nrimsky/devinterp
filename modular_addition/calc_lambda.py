@@ -895,17 +895,18 @@ def grok_exp():
         2: list(glob("exp_params/rerun_exps/*2grok.json")),
         3: list(glob("exp_params/rerun_exps/*3grok.json")),
         4: list(glob("exp_params/rerun_exps/*4grok.json")),
+        5: list(glob("exp_params/rerun_exps/*5grok.json")),
     }
     full_results = []
     plt.clf()
     for tm in temp_multipliers:
         sgld_params = SGLDParams(
-            gamma=10,
-            epsilon=0.001,
-            n_steps=2000,
+            gamma=5,
+            epsilon=0.0003,
+            n_steps=2500,
             m=64,
             temp_multiplier=tm,
-            get_updated_model_parameters=lambda x: x.embedding.parameters(),
+            get_updated_model_parameters=lambda x: x.linear2.parameters(),
         )
         results = []
         for n_groks, filenames in files.items():
