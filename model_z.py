@@ -46,49 +46,48 @@ def train(act_fn: Callable, hidden_dim: int, epochs: int, lr: float, dataset: t.
         
 
 def experiment():
-    n_multipliers = [exp(i) for i in range(-4, 3)]
-    noises = [0, 0.1, 0.3]
+    temp_multipliers = [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100]
+    act_fns = [lambda x: x**2, t.nn.SiLU(), t.nn.ReLU()]
+    act_fn_names = ["Quadratic", "SiLU", "ReLU"]
     full_results = []
-    for noise in noises:
+    for fn in act_fns:
         results = []
-        for sample in range(5):
+        for _ in range(5):
             sample_results = []
-            for n_multiplier in n_multipliers:
-                n = 1000
+            for t_multiplier in temp_multipliers:
                 n_epochs = 3000
                 hidden_dim = 20
                 lr = 0.02
-                dataset, labels = get_dataset(n, noise)
-                act_fn = lambda x: x**2
+                batch_size=200
+                dataset, labels = get_dataset(batch_size, 0)
                 loss_fn = t.nn.MSELoss()
-                model = train(act_fn, hidden_dim, n_epochs, lr, dataset, labels)
+                model = train(fn, hidden_dim, n_epochs, lr, dataset, labels)
                 sgld_params = SGLDParams(
                     gamma=5,
                     epsilon=0.0001,
                     n_steps=5000,
-                    batch_size=n,
-                    n_multiplier=n_multiplier,
+                    batch_size=batch_size,
+                    temp_multiplier=t_multiplier,
                     loss_fn=loss_fn,
                 )
                 lambda_hat = sgld(model, sgld_params, dataset, labels)
-                print(lambda_hat.item(), n_multiplier, noise)
+                print(lambda_hat.item(), t_multiplier)
                 sample_results.append(lambda_hat.item())
             results.append(sample_results)
         full_results.append([sum(i) / len(i) for i in zip(*results)])
 
-    with open("results_quad.txt", "w") as f:
-        for noise, result in zip(noises, full_results):
-            f.write(f"{noise} {result}\n")
-        # write the multipliers
-        f.write(f"multipliers: {n_multipliers}\n")
+    # write same results to txt file
+    with open("results_quad_5_samples_diff_fns.txt", "w") as f:
+        for i in range(len(act_fn_names)):
+            f.write(f"{act_fn_names[i]}: {full_results[i]}\n")
 
-    for noise, result in zip(noises, full_results):
-        plt.plot(list(range(len(n_multipliers))), result, label=f"noise={noise}", marker="o")
+    for actfn, result in zip(act_fn_names, full_results):
+        plt.plot(list(range(len(temp_multipliers))), result, label=f"function={actfn}", marker="o", linestyle="--")
 
     # x ticks are n_multipliers
-    plt.xticks(list(range(len(n_multipliers))), [round(i, 2) for i in n_multipliers])
+    plt.xticks(list(range(len(temp_multipliers))), [round(i, 2) for i in temp_multipliers])
     plt.legend()
-    plt.savefig("results_quad_5_samples.png")
+    plt.savefig("results_quad_5_samples_diff_fns.png")
 
         
 if __name__ == "__main__":

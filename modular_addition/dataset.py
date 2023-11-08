@@ -32,13 +32,19 @@ def hash_with_seed(value, seed):
     return int(m.hexdigest(), 16)
 
 
-def make_random_dataset(p, seed):
+def make_random_dataset(p, seed, is_commutative=False):
     data = []
     pairs = get_all_pairs(p)
-    for a, b in pairs:
-        out = (a * b * 2 * p) + a + b
-        out = hash_with_seed(out, seed) % p
-        data.append(((t.tensor(a), t.tensor(b)), t.tensor(out)))
+    if is_commutative:
+        for a, b in pairs:
+            out = (a * b * 2 * p) + a + b
+            out = hash_with_seed(out, seed) % p
+            data.append(((t.tensor(a), t.tensor(b)), t.tensor(out)))
+    else:
+        for a, b in pairs:
+            out = 2 * a * p + b 
+            out = hash_with_seed(out, seed) % p
+            data.append(((t.tensor(a), t.tensor(b)), t.tensor(out)))
     return data
 
 

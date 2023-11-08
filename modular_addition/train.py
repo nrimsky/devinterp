@@ -262,19 +262,22 @@ if __name__ == "__main__":
         scale_embed=1.0,
         use_random_dataset=False,
         freeze_middle=False,
-        n_batches=15000,
+        n_batches=10000,
         n_save_model_checkpoints=0,
         lr=0.005,
         magnitude=False,
         ablation_fourier=False,
-        do_viz_weights_modes=False,
+        do_viz_weights_modes=True,
         batch_size=128,
         num_no_weight_decay_steps=0,
         run_id=0,
         activation="gelu",
-        hidden_size=48,
-        embed_dim=6,
-        # weight_decay=0.0002,
-        p=71,
+        hidden_size=96,
+        embed_dim=12,
+        train_frac=0.95,
+        p=17
     )
-    frac_sweep_exp([n / 10 for n in range(1, 9)], params, "frac_sweep_latest_2")
+    for run_id in range(10,20):
+        params.run_id = run_id
+        params.save_to_file(f"exp_params/rerun_exps/{params.p}_{params.run_id}.json")
+        run_exp(params)

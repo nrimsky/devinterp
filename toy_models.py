@@ -3,7 +3,7 @@ from torch import nn
 from sgld_simple import sgld, SGLDParams
 from typing import List
 from math import exp
-
+from matplotlib import pyplot as plt
 
 class SingleParamFunction(nn.Module):
     def __init__(self):
@@ -38,25 +38,37 @@ class QuadApprox(nn.Module):
 # print(f"The estimated effective dimensionality of the model is: {lambda_hat.item()}")
 
 
-n_multipliers = [10, 100, 1000, 10000, 100000]
-results = []
+temp_multipliers = [30, 3, .3, .03]
+spectra = [
+    [1, 0.1, 0.01, 0.001],
+    [1, 0.1, 0.01, 0],
+    [1, 0.1, 0, 0],
+    [1, 0, 0, 0],
+]
 
-for n_multiplier in n_multipliers:
-    sgld_params = SGLDParams(
-        gamma=1,
-        epsilon=0.0001,
-        n_steps=10000,
-        batch_size=64,
-        n_multiplier=n_multiplier,
-        loss_fn=lambda stuff: t.sum(stuff[0]**2 * stuff[1])
-    )
 
-    n = 20
-    spectrum = [exp(-i/2) for i in range(n)]
+def loss_fn(p_s):
+    params, spectrum = p_s
+    return t.sum(params**2 * spectrum) + t.sum(params**4)
 
-    lambda_hat = sgld(QuadApprox(spectrum), sgld_params)
-
-    print(f"The estimated effective dimensionality of the model is: {lambda_hat.item()}")
-    results.append(lambda_hat.item())
-
-print(results)
+sgld_params = SGLDParams(
+    gamma=0,
+    epsilon=0.01,
+    n_steps=30000,
+    batch_size=64,
+    loss_fn=loss_fn,
+)
+for temp_multiplier in temp_multipliers:
+    sgld_params.temp_multiplier = temp_multiplier
+    lambdas = []
+    models = [QuadApprox(spectrum) for spectrum in spectra]
+    for idx, model in enumerate(models):
+        lambda_hat = sgld(model, sgld_params)
+        print(f"Rank: {4-idx} | T: {temp_multiplier} | Lambda: {lambda_hat.item()}")
+        lambdas.append(lambda_hat.item())
+    plt.plot([4, 3, 2, 1], lambdas, label=f"Temperature: {temp_multiplier}", marker="o", linestyle="--")
+plt.legend()
+plt.xlabel("Hessian Rank (with decaying eigenvalues)")
+plt.ylabel("Estimated $\hat{\lambda}$")
+plt.title("Estimated $\hat{\lambda}$ vs. Hessian Rank at different temperatures")
+plt.savefig("quad_approx_t_scale.png")

@@ -34,7 +34,8 @@ class SGLDParams:
     num_point_samples: Optional[int] = None
     n_magnitude_samples: Optional[int] = None
     weight_decay: float = 0
-    logit_scaling: float = 1
+    logit_scaling: float = 1.0
+    temp_multiplier: float = 1.0
 
 
 def cross_entropy_loss(logits, y_s, logit_scaling=1):
@@ -68,6 +69,10 @@ def get_full_train_loss(model, dataset, device, logit_scaling=1):
     return cross_entropy_loss(out, Y, logit_scaling=logit_scaling)
 
 
+def mean(arr):
+    return sum(arr) / len(arr)
+
+
 def sgld(model, sgld_params, dataset, device):
     """
     model: MLP model
@@ -79,12 +84,15 @@ def sgld(model, sgld_params, dataset, device):
     """
     n = len(dataset)
     model = model.to(device)
-    beta = 1 / log(n * sgld_params.n_multiplier)
+    effective_n = n * sgld_params.n_multiplier
+
+    inverse_temp = effective_n / log(effective_n)
+    inverse_temp /= sgld_params.temp_multiplier
 
     init_loss = get_full_train_loss(
         model, dataset, device, logit_scaling=sgld_params.logit_scaling
     )
-    n_ln_wstar = n * init_loss * sgld_params.n_multiplier
+
     idx = list(range(len(dataset)))
     optimizer = optimizer = t.optim.SGD(
         sgld_params.get_updated_model_parameters(model),
@@ -118,7 +126,6 @@ def sgld(model, sgld_params, dataset, device):
 
     array_loss = []
     array_weight_norm = []
-    full_losses = []
     magnitude_modes = []
 
     frame_every = sgld_params.n_steps // 50
@@ -142,31 +149,19 @@ def sgld(model, sgld_params, dataset, device):
         Y = t.stack([dataset[b][1] for b in batch_idx]).to(device)
         optimizer.zero_grad()
         out = model(X_1, X_2)
-        max_logits = [float(x.item()) for x in sorted(list(out[0]), reverse=True)[:5]]
         cross_entropy_loss_value = cross_entropy_loss(
             out, Y, logit_scaling=sgld_params.logit_scaling
         )
-        # if sgld_step % 100 == 0:
-        #     print(f"max logits: {max_logits}")
         array_loss.append(cross_entropy_loss_value.item())
         w = t.nn.utils.parameters_to_vector(model.parameters())
         array_weight_norm.append((w * submodule_param_mask).norm(p=2).item())
         elasticity_loss_term = (sgld_params.gamma / 2) * t.sum(((w_0 - w) ** 2))
-        weight_size_term = (
-            t.sum(w**2)
-            * (sgld_params.weight_decay / 2)
-            * n
-            * beta
-            * sgld_params.n_multiplier
-        )
+        weight_size_term = t.sum(w**2) * (sgld_params.weight_decay / 2)
         log_likelihood_loss_term = (
-            cross_entropy_loss_value * n * beta * sgld_params.n_multiplier
-        )
+            cross_entropy_loss_value + weight_size_term
+        ) * inverse_temp
         full_loss = (sgld_params.epsilon / 2) * (
-            elasticity_loss_term + log_likelihood_loss_term + weight_size_term
-        )
-        full_losses.append(
-            (elasticity_loss_term.item(), log_likelihood_loss_term.item())
+            elasticity_loss_term + log_likelihood_loss_term
         )
         full_loss.backward()
         optimizer.step()
@@ -217,16 +212,14 @@ def sgld(model, sgld_params, dataset, device):
                     modes = modes.tolist()
                     modes = modes[1 : p // 2 + 1]
                     magnitude_modes.append(modes)
-    wbic = sgld_params.n_multiplier * n * sum(array_loss[len(array_loss)//4:]) / (len(array_loss) - len(array_loss)//4)
-    lambda_hat = (wbic - n_ln_wstar) / log(sgld_params.n_multiplier * n)
+
+    lambda_hat = (mean(array_loss[len(array_loss) // 4 :]) - init_loss) * inverse_temp
+
     print(f"lambda_hat: {lambda_hat}")
-    print(f"wbic: {wbic}")
-    print(f"n_ln_wstar: {n_ln_wstar}")
     print(f"init_loss: {init_loss}")
     print(f"sgld_params: {sgld_params}")
     print(f"array_loss: {array_loss[::len(array_loss)//20]}")
     print(f"array_weight_norm: {array_weight_norm[::len(array_weight_norm)//20]}")
-    print(f"full_losses: {full_losses[::len(full_losses)//20]}")
     if sgld_params.movie:
         run_movie_cmd("sgld")
     if sgld_params.num_point_samples is not None:
@@ -760,9 +753,12 @@ def plot_lambda_per_p_different_exps(exp_dirs, exp_names, sgld_params, resample=
     """
     exp_dirs: list of directories containing experiment params json files corresponding to different p value sweeps
     exp_names: name of experiment being run for that p sweep
-    sgld_params: SGLDParams object - SGLD settings
+    sgld_params: List of SGLDParams objects, or single settings - SGLD settings to use for each exp_dir
     resample: whether to resample if lambda already saved
     """
+    # If sgld_params is not a list, make it a list
+    if not isinstance(sgld_params, list):
+        sgld_params = [sgld_params] * len(exp_dirs)
     results = defaultdict(lambda: defaultdict(list))
     for i, d in enumerate(exp_dirs):
         files = glob(f"{d}/*.json")
@@ -772,7 +768,7 @@ def plot_lambda_per_p_different_exps(exp_dirs, exp_names, sgld_params, resample=
             if not resample and exp_params.lambda_hat is not None:
                 results[exp_names[i]][p].append(exp_params.lambda_hat)
             else:
-                lambda_hat, _, _ = get_lambda(exp_params, sgld_params)
+                lambda_hat, _, _ = get_lambda(exp_params, sgld_params[i])
                 results[exp_names[i]][p].append(lambda_hat.item())
                 exp_params.lambda_hat = lambda_hat.item()
                 exp_params.save_to_file(f)
@@ -855,9 +851,9 @@ def slope_vs_n_mult(sgld_params, exp_dir, n_mults):
             run_id = exp_params.run_id
             lambda_hat, test_loss, train_loss = get_lambda(exp_params, sgld_params)
             results[p][run_id] = (
-                lambda_hat.item(),
-                test_loss.item(),
-                train_loss.item(),
+                lambda_hat.item().cpu(),
+                test_loss.item().cpu(),
+                train_loss.item().cpu(),
             )
             exp_params.lambda_hat = lambda_hat.item()
             exp_params.test_loss = test_loss.item()
@@ -893,19 +889,52 @@ def slope_vs_n_mult(sgld_params, exp_dir, n_mults):
     plt.close()
 
 
+def grok_exp():
+    temp_multipliers = [0.1, 0.3, 1, 3, 10, 30, 100]
+    files = {
+        2: list(glob("exp_params/rerun_exps/*2grok.json")),
+        3: list(glob("exp_params/rerun_exps/*3grok.json")),
+        4: list(glob("exp_params/rerun_exps/*4grok.json")),
+    }
+    full_results = []
+    plt.clf()
+    for tm in temp_multipliers:
+        sgld_params = SGLDParams(
+            gamma=10,
+            epsilon=0.001,
+            n_steps=2000,
+            m=64,
+            temp_multiplier=tm,
+            get_updated_model_parameters=lambda x: x.embedding.parameters(),
+        )
+        results = []
+        for n_groks, filenames in files.items():
+            lambdas = []
+            for f in filenames:
+                exp_params = ExperimentParams.load_from_file(f)
+                lambda_hat, _, _ = get_lambda(exp_params, sgld_params)
+                lambdas.append(lambda_hat)
+            mean_lambda = sum(lambdas) / len(lambdas)
+            results.append(mean_lambda.item())
+        full_results.append(results)
+        plt.plot(
+            list(files.keys()),
+            results,
+            marker="o",
+            label=f"temp_multiplier={tm}",
+            linestyle="--",
+        )
+        print(f"temp_multiplier={tm}, results={results}")
+    print(f"full_results={full_results}")
+    plt.xlabel("# circuits")
+    plt.ylabel("$\hat{\lambda}$")
+    plt.xticks(list(files.keys()))
+    plt.legend()
+    plt.title("$\hat{\lambda}$ vs # circuits at different temperatures")
+    plt.savefig(
+        f'plots/lambda_vs_n_groks_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+    )
+
+
 if __name__ == "__main__":
-    sgld_params = SGLDParams(
-        gamma=10,
-        epsilon=0.0003,
-        n_steps=2000,
-        m=64,
-        restrict_to_orth_grad=True,
-        logit_scaling=1,
-        n_multiplier=0.05,
-    )
-    plot_lambda_per_p_different_exps(
-        ["exp_params/emb_16_mid_64_2", "exp_params/emb_16_mid_64_2_RANDOM"],
-        ["modular addition", "random"],
-        sgld_params,
-        resample=True,
-    )
+    grok_exp()
