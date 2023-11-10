@@ -79,6 +79,7 @@ def sgld(model, sgld_params, inputs=None, labels=None):
     print("Init loss", init_loss.item())
     print("Mean loss", mean(array_loss[start_pos:]))
     print("Inv temp", inv_temperature)
+    print("Lambda hat", lambda_hat.item())
     # For debugging
     print(array_loss[::len(array_loss) // 20])
     return lambda_hat

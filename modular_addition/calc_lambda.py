@@ -890,23 +890,23 @@ def slope_vs_n_mult(sgld_params, exp_dir, n_mults):
 
 
 def grok_exp():
-    temp_multipliers = [0.1, 0.3, 1, 3, 10, 30, 100]
+    temp_multipliers = [0.1, 0.3, 1, 3]
     files = {
-        2: list(glob("exp_params/rerun_exps/*2grok.json")),
-        3: list(glob("exp_params/rerun_exps/*3grok.json")),
-        4: list(glob("exp_params/rerun_exps/*4grok.json")),
-        5: list(glob("exp_params/rerun_exps/*5grok.json")),
+        2: list(glob("exp_params/QUADRATIC/*2grok.json")),
+        3: list(glob("exp_params/QUADRATIC/*3grok.json")),
+        4: list(glob("exp_params/QUADRATIC/*4grok.json")),
+        # 5: list(glob("exp_params/rerun_exps/*5grok.json")),
     }
     full_results = []
     plt.clf()
     for tm in temp_multipliers:
         sgld_params = SGLDParams(
             gamma=5,
-            epsilon=0.0003,
-            n_steps=2500,
-            m=64,
+            epsilon=0.0001,
+            n_steps=5000,
+            m=200,
             temp_multiplier=tm,
-            get_updated_model_parameters=lambda x: x.linear2.parameters(),
+            get_updated_model_parameters=lambda m: m.embedding.parameters(),
         )
         results = []
         for n_groks, filenames in files.items():
@@ -938,4 +938,21 @@ def grok_exp():
 
 
 if __name__ == "__main__":
-    grok_exp()
+    temps = [0.1, 0.3, 1, 3, 10, 30, 100]
+    plot_lambda_per_p_different_exps(
+        exp_dirs=["exp_params/psweep_96_16"] * len(temps),
+        exp_names=[f"temp_multiplier={t}" for t in temps],
+        sgld_params=[
+            SGLDParams(
+                gamma=5,
+                epsilon=0.001,
+                n_steps=3000,
+                m=64,
+                temp_multiplier=tm,
+                restrict_to_orth_grad=True,
+                weight_decay=0.0
+            )
+            for tm in temps
+        ],
+        resample=True
+    )

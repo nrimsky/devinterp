@@ -17,6 +17,7 @@ def hessian_eig(
     params_file: str, device="cuda", n_top_vectors=3000, param_extract_fn=None
 ):
     params = ExperimentParams.load_from_file(params_file)
+    params.weight_decay = 0 # TODO: Remove this
     dataset = make_dataset(params.p)
     dataset, _ = train_test_split(
         dataset,
@@ -131,4 +132,4 @@ if __name__ == "__main__":
         # 0.9,
         # 0.95,
     ]
-    hessian_eig_sweep(files, labels, 3000)
+    hessian_eig_sweep(files, labels, 1000)

@@ -46,7 +46,7 @@ def train(act_fn: Callable, hidden_dim: int, epochs: int, lr: float, dataset: t.
         
 
 def experiment():
-    temp_multipliers = [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100]
+    temp_multipliers = [0.3, 1, 3, 10, 30]
     act_fns = [lambda x: x**2, t.nn.SiLU(), t.nn.ReLU()]
     act_fn_names = ["Quadratic", "SiLU", "ReLU"]
     full_results = []
@@ -59,7 +59,7 @@ def experiment():
                 hidden_dim = 20
                 lr = 0.02
                 batch_size=200
-                dataset, labels = get_dataset(batch_size, 0)
+                dataset, labels = get_dataset(2000, 0)
                 loss_fn = t.nn.MSELoss()
                 model = train(fn, hidden_dim, n_epochs, lr, dataset, labels)
                 sgld_params = SGLDParams(
@@ -76,18 +76,25 @@ def experiment():
             results.append(sample_results)
         full_results.append([sum(i) / len(i) for i in zip(*results)])
 
+
+
     # write same results to txt file
-    with open("results_quad_5_samples_diff_fns.txt", "w") as f:
+    with open("results_quad_5_samples_diff_fns2.txt", "w") as f:
         for i in range(len(act_fn_names)):
             f.write(f"{act_fn_names[i]}: {full_results[i]}\n")
 
     for actfn, result in zip(act_fn_names, full_results):
-        plt.plot(list(range(len(temp_multipliers))), result, label=f"function={actfn}", marker="o", linestyle="--")
+        plt.plot(list(range(len(temp_multipliers))), result, label=f"Activation Function: {actfn}", marker="o", linestyle="--")
+
+    # plot dashed line at 15 in black
+    plt.plot(list(range(len(temp_multipliers))), [15 for _ in range(len(temp_multipliers))], color="black", linestyle="--", label="Theoretical RLCT")
 
     # x ticks are n_multipliers
     plt.xticks(list(range(len(temp_multipliers))), [round(i, 2) for i in temp_multipliers])
+    plt.xlabel("Temperature Multiplier")
+    plt.ylabel("Estimated $\hat{\lambda}$")
     plt.legend()
-    plt.savefig("results_quad_5_samples_diff_fns.png")
+    plt.savefig("results_quad_5_samples_diff_fns2.png")
 
         
 if __name__ == "__main__":
