@@ -26,9 +26,9 @@ class SGLDParams:
     gamma: float = 1
     epsilon: float = 0.001
     n_steps: int = 10000
-    m: int = 512
+    m: int = 512  # SGLD batch size
     restrict_to_orth_grad: bool = False
-    get_updated_model_parameters: Callable = lambda model: model.parameters()
+    get_updated_model_parameters: Callable = lambda model: model.parameters()  # Override to only search parameter subspace
     n_multiplier: float = 1
     movie: bool = False
     num_point_samples: Optional[int] = None
@@ -524,6 +524,7 @@ def get_lambda(params, sgld_params, checkpoint_no=None):
     test_loss = get_full_train_loss(model, test_data, params.device)
     train_loss = get_full_train_loss(model, train_data, params.device)
     _, lambda_hat = sgld(model, sgld_params, train_data, params.device)
+    lambda_hat, test_loss, train_loss = lambda_hat.cpu().item(), test_loss.cpu().item(), train_loss.cpu().item()
     return lambda_hat, test_loss, train_loss
 
 
@@ -541,9 +542,9 @@ def get_lambda_per_quantity(param_files, sgld_params, resample=True):
         test_losses.append(test_loss)
         train_losses.append(train_loss)
         param_dict = params.get_dict()
-        param_dict["lambda_hat"] = lambda_hat.item()
-        param_dict["test_loss"] = test_loss.item()
-        param_dict["train_loss"] = train_loss.item()
+        param_dict["lambda_hat"] = lambda_hat
+        param_dict["test_loss"] = test_loss
+        param_dict["train_loss"] = train_loss
         with open(param_file, "w") as f:
             json.dump(param_dict, f)
     return lambda_values, test_losses, train_losses
@@ -705,9 +706,9 @@ def plot_lambda_per_p(sgld_params, p_sweep_dir, resample=False, append_to_title=
             continue
         lambda_hat, test_loss, train_loss = get_lambda(exp_params, sgld_params)
         results[p][run_id] = (lambda_hat, test_loss, train_loss)
-        exp_params.lambda_hat = lambda_hat.item()
-        exp_params.test_loss = test_loss.item()
-        exp_params.train_loss = train_loss.item()
+        exp_params.lambda_hat = lambda_hat
+        exp_params.test_loss = test_loss
+        exp_params.train_loss = train_loss
         exp_params.save_to_file(f)
     print("Extracted results", results)
 
@@ -769,8 +770,8 @@ def plot_lambda_per_p_different_exps(exp_dirs, exp_names, sgld_params, resample=
                 results[exp_names[i]][p].append(exp_params.lambda_hat)
             else:
                 lambda_hat, _, _ = get_lambda(exp_params, sgld_params[i])
-                results[exp_names[i]][p].append(lambda_hat.item())
-                exp_params.lambda_hat = lambda_hat.item()
+                results[exp_names[i]][p].append(lambda_hat)
+                exp_params.lambda_hat = lambda_hat
                 exp_params.save_to_file(f)
 
     # lambda per p for each exp on same plot
@@ -812,9 +813,9 @@ def plot_lambda_per_frac(sgld_params, frac_sweep_dir, resample=False):
             continue
         lambda_hat, test_loss, train_loss = get_lambda(exp_params, sgld_params)
         results[frac][run_id] = (lambda_hat, test_loss, train_loss)
-        exp_params.lambda_hat = lambda_hat.item()
-        exp_params.test_loss = test_loss.item()
-        exp_params.train_loss = train_loss.item()
+        exp_params.lambda_hat = lambda_hat
+        exp_params.test_loss = test_loss
+        exp_params.train_loss = train_loss
         exp_params.save_to_file(f)
     print("Extracted results", results)
 
@@ -851,13 +852,13 @@ def slope_vs_n_mult(sgld_params, exp_dir, n_mults):
             run_id = exp_params.run_id
             lambda_hat, test_loss, train_loss = get_lambda(exp_params, sgld_params)
             results[p][run_id] = (
-                lambda_hat.item().cpu(),
-                test_loss.item().cpu(),
-                train_loss.item().cpu(),
+                lambda_hat,
+                test_loss,
+                train_loss,
             )
-            exp_params.lambda_hat = lambda_hat.item()
-            exp_params.test_loss = test_loss.item()
-            exp_params.train_loss = train_loss.item()
+            exp_params.lambda_hat = lambda_hat
+            exp_params.test_loss = test_loss
+            exp_params.train_loss = train_loss
             exp_params.save_to_file(f)
 
         with open(f"results/results_n_mult_{n_mult}.json", "w") as f:
@@ -916,7 +917,7 @@ def grok_exp():
                 lambda_hat, _, _ = get_lambda(exp_params, sgld_params)
                 lambdas.append(lambda_hat)
             mean_lambda = sum(lambdas) / len(lambdas)
-            results.append(mean_lambda.item())
+            results.append(mean_lambda)
         full_results.append(results)
         plt.plot(
             list(files.keys()),
@@ -938,21 +939,30 @@ def grok_exp():
 
 
 if __name__ == "__main__":
-    temps = [0.1, 0.3, 1, 3, 10, 30, 100]
-    plot_lambda_per_p_different_exps(
-        exp_dirs=["exp_params/psweep_96_16"] * len(temps),
-        exp_names=[f"temp_multiplier={t}" for t in temps],
-        sgld_params=[
-            SGLDParams(
-                gamma=5,
-                epsilon=0.001,
-                n_steps=3000,
-                m=64,
-                temp_multiplier=tm,
-                restrict_to_orth_grad=True,
-                weight_decay=0.0
-            )
-            for tm in temps
-        ],
-        resample=True
+    # temps = [0.1, 0.3, 1, 3, 10, 30, 100]
+    # plot_lambda_per_p_different_exps(
+    #     exp_dirs=["exp_params/psweep_96_16"] * len(temps),
+    #     exp_names=[f"temp_multiplier={t}" for t in temps],
+    #     sgld_params=[
+    #         SGLDParams(
+    #             gamma=5,
+    #             epsilon=0.001,
+    #             n_steps=3000,
+    #             m=64,
+    #             temp_multiplier=tm,
+    #             restrict_to_orth_grad=True,
+    #             weight_decay=0.0
+    #         )
+    #         for tm in temps
+    #     ],
+    #     resample=True
+    # )
+    params = SGLDParams(
+        gamma=5,
+        epsilon=0.001,
+        n_steps=2000,
+        m=64,
+        restrict_to_orth_grad=True,
+        weight_decay=0.0
     )
+    plot_lambda_per_checkpoint("exp_params/example2/53_0.json", params)

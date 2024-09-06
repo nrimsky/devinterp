@@ -14,8 +14,7 @@ from dataclasses import dataclass, asdict
 import json
 from helpers import eval_model
 from typing import Optional
-from glob import glob
-
+import os 
 
 @dataclass
 class ExperimentParams:
@@ -200,6 +199,10 @@ def count_params(model):
 
 
 def run_exp(params):
+    if not os.path.exists(os.path.join("models", "checkpoints")):
+        os.makedirs(os.path.join("models", "checkpoints"))
+    if not os.path.exists("frames"):
+        os.makedirs("frames")
     params.save_to_file(f"models/params_{params.get_suffix()}.json")
     print(f"models/params_{params.get_suffix()}.json")
     model = MLP(params)
@@ -237,6 +240,8 @@ def run_exp(params):
 
 
 def p_sweep_exp(p_values, params, psweep):
+    if not os.path.exists(f"exp_params/{psweep}"):
+        os.makedirs(f"exp_params/{psweep}")
     for p in p_values:
         params.p = p
         params.save_to_file(f"exp_params/{psweep}/{p}_{params.run_id}.json")
@@ -244,6 +249,8 @@ def p_sweep_exp(p_values, params, psweep):
 
 
 def frac_sweep_exp(train_fracs, params, psweep):
+    if not os.path.exists(f"exp_params/{psweep}"):
+        os.makedirs(f"exp_params/{psweep}")
     for frac in train_fracs:
         params.train_frac = frac
         params.save_to_file(f"exp_params/{psweep}/{frac}_{params.run_id}.json")
@@ -258,24 +265,26 @@ if __name__ == "__main__":
     params = ExperimentParams(
         linear_1_tied=False,
         tie_unembed=False,
-        movie=False,
+        movie=True,
         scale_linear_1_factor=1.0,
         scale_embed=1.0,
         use_random_dataset=False,
         freeze_middle=False,
-        n_batches=10000,
-        n_save_model_checkpoints=0,
+        n_batches=2000,
+        n_save_model_checkpoints=40,
         lr=0.005,
         magnitude=False,
         ablation_fourier=False,
         do_viz_weights_modes=False,
         batch_size=128,
         num_no_weight_decay_steps=0,
-        run_id=1,
+        weight_decay=0,
+        run_id=0,
         activation="gelu",
-        hidden_size=96,
-        embed_dim=12,
+        hidden_size=32,
+        embed_dim=16,
         train_frac=0.95
     )
-    p_values = [7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43]
-    p_sweep_exp(p_values, params, "non_random_sweep_new")
+    # p_values = [7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43]
+    p_values  = [53]
+    p_sweep_exp(p_values, params, "example2")
